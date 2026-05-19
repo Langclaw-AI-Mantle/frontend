@@ -25,6 +25,8 @@ import {
   Cpu,
   CreditCard,
   Database,
+  Bookmark,
+  FlaskConical,
   LogOut,
   MessagesSquare,
   MoreHorizontal,
@@ -32,6 +34,7 @@ import {
   Pin,
   PinOff,
   Settings,
+  ShieldCheck,
   Trash2,
   User2,
 } from "lucide-react";
@@ -332,6 +335,30 @@ export function AppSidebar() {
             <Link href="/usage">
               <Database />
               <span>Usage</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton asChild>
+            <Link href="/watchlist">
+              <Bookmark />
+              <span>Alpha Watchlist</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton asChild>
+            <Link href="/strategy">
+              <FlaskConical />
+              <span>Strategy Lab</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton asChild>
+            <Link href="/proofs">
+              <ShieldCheck />
+              <span>Proof Center</span>
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>

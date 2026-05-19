@@ -245,6 +245,19 @@ export function buildOnChainAnswerContent(payload: OnChainToolFinalPayload) {
     "### Caveat",
     "",
     normalizeMarkdownText(payload.caveat),
+    ...(payload.proof
+      ? [
+          "",
+          "### Agent decision proof",
+          "",
+          `Status: ${payload.proof.chain.status}`,
+          `Agent ID: ${payload.proof.chain.agentId ?? "Not available"}`,
+          `Decision hash: ${payload.proof.chain.decisionHash ?? payload.proof.chain.briefHash}`,
+          payload.proof.chain.explorerUrl
+            ? `Transaction: ${payload.proof.chain.explorerUrl}`
+            : "",
+        ]
+      : []),
   ];
 
   return joinMarkdownLines(lines);

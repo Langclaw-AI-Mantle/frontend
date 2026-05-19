@@ -549,6 +549,11 @@ function formatNeuron(value: string) {
   try {
     const raw = BigInt(value);
     const base = BigInt("1000000000000000000");
+
+    if (raw > BigInt(0) && raw < base / BigInt(1000000)) {
+      return "<0.000001";
+    }
+
     const whole = raw / base;
     const fraction = raw % base;
     const fractionText = fraction.toString().padStart(18, "0").slice(0, 6);

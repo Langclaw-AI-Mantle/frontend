@@ -1,43 +1,73 @@
-This is the Next.js frontend for **Langclaw Mantle Alpha Sentinel**: a Mantle-first AI Alpha & Data interface for smart-money monitoring, liquidity anomaly analysis, protocol momentum checks, and verifiable agent decision proof.
+# Langclaw Frontend
 
-## Getting Started
+Next.js interface for **Langclaw Mantle Alpha Sentinel**.
 
-First, run the development server:
+The app gives users a Mantle-first AI Alpha & Data workspace for:
+
+- smart-money and holder-flow monitoring
+- liquidity anomaly analysis
+- Mantle protocol / yield momentum checks
+- Strategy Lab backtesting and paper-trading proof for Mantle pairs
+- source evidence inspection
+- Alpha Watchlist for Supabase-backed saved follow-up signals
+- on-chain agent decision proof display
+- Proof Center for registry decision history
+
+## Local Setup
 
 ```bash
 cp .env.example .env.local
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`.
 
-The frontend talks to the Langclaw backend through
-`NEXT_PUBLIC_LANGCLAW_API_URL`. By default this points to
-`http://localhost:3001`, matching the backend server.
+The frontend talks to the backend through `NEXT_PUBLIC_LANGCLAW_API_URL`. By default, use:
 
-The wallet provider is Mantle-first (`chainId 5000`, native token `MNT`) and the existing chat layout is reused for Mantle Alpha, Mantle Intelligence, source evidence, and decision proof panels.
+```bash
+NEXT_PUBLIC_LANGCLAW_API_URL=http://localhost:3001
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Demo Flow
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Use Mantle Intelligence mode with:
 
-## Learn More
+```text
+Analyze holder flow and smart-money signals on Mantle token 0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34
+```
 
-To learn more about Next.js, take a look at the following resources:
+Then:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```text
+Detect liquidity anomaly on Mantle pair 0xeAfc4D6d4c3391Cd4Fc10c85D2f5f972d58C0dD5
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The response should show source-backed signals, risk notes, provider evidence, and the `Agent decision proof` panel when backend proof anchoring is enabled.
 
-## Deploy on Vercel
+Click **Add to watchlist** on a Mantle Intelligence result, then open `/watchlist` to review saved alpha signals. Open `/strategy` to run the Dune-backed Mantle Liquidity Momentum Strategy, review equity curve/trades, and open a paper trade proof. Open `/proofs` to inspect the latest on-chain registry decisions and Strategy Proofs for the ERC-8004 agent.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Mantle Intelligence requests also reserve and settle the user's internal MNT usage balance through the backend billing ledger.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Mantle Proof
+
+Live proof registry:
+
+```text
+0xe69755e4249c4978c39fbe847ca9674ce7af3505
+```
+
+ERC-8004 agent ID:
+
+```text
+94
+```
+
+Strategy Lab journal proofs use `LangclawTradingJournal`. The page still runs backtests when the journal address is missing, but Proof Center will show the journal as not configured until `LANGCLAW_TRADING_JOURNAL_ADDRESS` is set on the backend.
+
+## Verification
+
+```bash
+pnpm typecheck
+pnpm build
+```

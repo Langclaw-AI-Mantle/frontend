@@ -2,7 +2,19 @@
 
 import { useChat } from "@ai-sdk/react";
 import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  XAxis,
+  YAxis,
+} from "recharts";
+import {
   ActivityIcon,
+  BookmarkCheckIcon,
+  BookmarkPlusIcon,
   CopyIcon,
   InfoIcon,
   MessageSquareIcon,
@@ -12,6 +24,7 @@ import {
 import {
   Fragment,
   type ComponentType,
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -74,7 +87,6 @@ import {
   Tool,
   ToolContent,
   ToolHeader,
-  ToolOutput,
   type ToolPart,
 } from "@/components/ai-elements/tool";
 import {
@@ -88,6 +100,13 @@ import {
   WorkflowPlan,
 } from "@/components/LangclawResult";
 import { ButtonGroup } from "@/components/ui/button-group";
+import { Button } from "@/components/ui/button";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
@@ -106,8 +125,14 @@ import {
   uiMessagesToStoredMessages,
 } from "@/lib/chat-utils";
 import { createLangclawChatTransport } from "@/lib/langclaw-chat-transport";
+import {
+  LANGCLAW_ALPHA_WATCHLIST_UPDATED_EVENT,
+  buildAlphaWatchlistItem,
+  dispatchAlphaWatchlistUpdated,
+} from "@/lib/alpha-watchlist";
 import type { Experimental_TranscriptionResult } from "ai";
 import {
+  listAlphaWatchlist,
   dispatchChatSessionsUpdated,
   getChatSession,
   isWalletSignatureRequiredError,
@@ -120,6 +145,7 @@ import {
   type RouterModel,
   type ChatSession,
   type StoredChatMessage,
+  upsertAlphaWatchlistItem,
   upsertChatSession,
 } from "@/lib/langclaw-api";
 import { useWalletSession } from "@/hooks/use-wallet-session";
@@ -148,6 +174,28 @@ const CHAT_SUGGESTIONS = [
 ];
 
 const BACKEND_CONTEXT_WINDOW = 32_000;
+const alphaChartConfig = {
+  amount: {
+    color: "var(--chart-2)",
+    label: "Amount",
+  },
+  confidence: {
+    color: "var(--chart-2)",
+    label: "Confidence",
+  },
+  count: {
+    color: "var(--chart-2)",
+    label: "Tools",
+  },
+  score: {
+    color: "var(--chart-2)",
+    label: "Score",
+  },
+  value: {
+    color: "var(--chart-2)",
+    label: "Value",
+  },
+} satisfies ChartConfig;
 
 const Chat = ({ sessionId }: ChatProps) => {
   const { clearWalletAuth, getWalletAuth, isConnected, isSigning, openWalletModal } =
@@ -1064,16 +1112,128 @@ function RouterUsageTooltip({
 }
 
 function OnChainDetails({ payload }: { payload: OnChainToolFinalPayload }) {
+  const {
+    clearWalletAuth,
+    getWalletAuth,
+    hasCachedWalletAuth,
+    isConnected,
+    openWalletModal,
+  } = useWalletSession();
+  const watchlistItem = useMemo(() => buildAlphaWatchlistItem(payload), [payload]);
+  const [isWatchlisted, setIsWatchlisted] = useState(false);
+  const [isSavingWatchlist, setIsSavingWatchlist] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    const syncWatchlistState = async () => {
+      if (!isConnected || !hasCachedWalletAuth) {
+        setIsWatchlisted(false);
+        return;
+      }
+
+      try {
+        const wallet = await getWalletAuth();
+        const items = await listAlphaWatchlist(wallet);
+
+        if (active) {
+          setIsWatchlisted(
+            items.some((item) => item.id === watchlistItem.id)
+          );
+        }
+      } catch {
+        if (active) {
+          setIsWatchlisted(false);
+        }
+      }
+    };
+
+    void syncWatchlistState();
+    window.addEventListener(
+      LANGCLAW_ALPHA_WATCHLIST_UPDATED_EVENT,
+      syncWatchlistState,
+    );
+
+    return () => {
+      active = false;
+      window.removeEventListener(
+        LANGCLAW_ALPHA_WATCHLIST_UPDATED_EVENT,
+        syncWatchlistState,
+      );
+    };
+  }, [getWalletAuth, hasCachedWalletAuth, isConnected, watchlistItem.id]);
+
+  const handleAddToWatchlist = async () => {
+    if (isWatchlisted) {
+      return;
+    }
+
+    if (!isConnected) {
+      openWalletModal();
+      toast.error("Connect your wallet to save the watchlist.");
+      return;
+    }
+
+    setIsSavingWatchlist(true);
+
+    try {
+      const wallet = await getWalletAuth();
+      await upsertAlphaWatchlistItem(wallet, watchlistItem);
+      setIsWatchlisted(true);
+      dispatchAlphaWatchlistUpdated();
+      toast.success("Watchlist added", {
+        description: payload.title,
+      });
+    } catch (error) {
+      if (isWalletSignatureRequiredError(error)) {
+        clearWalletAuth();
+      }
+
+      toast.error(readFriendlyError(error, "Unable to save watchlist item."));
+    } finally {
+      setIsSavingWatchlist(false);
+    }
+  };
+
   return (
     <div className="space-y-3 rounded-md border bg-background/70 p-3">
-      <div className="flex flex-wrap gap-2">
-        <StatusPill label="Mode" value="Mantle Intelligence" />
-        <StatusPill label="Track" value="AI Alpha" />
-        <StatusPill label="Evidence" value="Evidence-backed" />
-        <StatusPill label="Intent" value={payload.plan.intent} />
-        <StatusPill label="Chain" value={payload.plan.chain} />
-        <StatusPill label="Tools" value={String(payload.tools.length)} />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-wrap gap-2">
+          <StatusPill label="Mode" value="Mantle Intelligence" />
+          <StatusPill label="Track" value="AI Alpha" />
+          <StatusPill label="Evidence" value="Evidence-backed" />
+          <StatusPill label="Intent" value={payload.plan.intent} />
+          <StatusPill label="Chain" value={payload.plan.chain} />
+          <StatusPill label="Tools" value={String(payload.tools.length)} />
+          {payload.proof?.chain.status && (
+            <StatusPill
+              label="Agent decision proof"
+              value={payload.proof.chain.status}
+            />
+          )}
+        </div>
+        <Button
+          className="self-start"
+          disabled={isWatchlisted || isSavingWatchlist}
+          onClick={() => void handleAddToWatchlist()}
+          size="sm"
+          type="button"
+          variant={isWatchlisted ? "secondary" : "outline"}
+        >
+          {isWatchlisted ? (
+            <BookmarkCheckIcon className="size-4" />
+          ) : (
+            <BookmarkPlusIcon className="size-4" />
+          )}
+          {isWatchlisted
+            ? "Watchlist added"
+            : isSavingWatchlist
+              ? "Saving..."
+              : "Add to watchlist"}
+        </Button>
       </div>
+      {payload.proof && <OnChainProofDetails proof={payload.proof} />}
+      <OnChainAlphaVisualSummary payload={payload} />
       <div className="space-y-2">
         <p className="font-medium text-foreground">Tool results</p>
         {payload.tools.map((tool) => (
@@ -1113,6 +1273,600 @@ function OnChainDetails({ payload }: { payload: OnChainToolFinalPayload }) {
       </div>
     </div>
   );
+}
+
+function OnChainProofDetails({
+  proof,
+}: {
+  proof: NonNullable<OnChainToolFinalPayload["proof"]>;
+}) {
+  return (
+    <div className="grid gap-2 md:grid-cols-2">
+      <div className="rounded-md border bg-background p-2">
+        <p className="font-medium text-foreground">Evidence bundle</p>
+        <p className="mt-1 break-all text-sm text-muted-foreground">
+          {proof.storage.evidenceUri}
+        </p>
+      </div>
+      <a
+        className="rounded-md border bg-background p-2"
+        href={proof.chain.explorerUrl}
+        rel="noreferrer"
+        target="_blank"
+      >
+        <p className="font-medium text-foreground">Decision proof</p>
+        <p className="mt-1 break-all text-sm text-muted-foreground">
+          {proof.chain.txHash ||
+            proof.chain.decisionHash ||
+            proof.chain.briefHash}
+        </p>
+      </a>
+    </div>
+  );
+}
+
+function OnChainAlphaVisualSummary({
+  payload,
+}: {
+  payload: OnChainToolFinalPayload;
+}) {
+  const summary = useMemo(() => buildOnChainVisualSummary(payload), [payload]);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="font-medium text-foreground">Visual summary</p>
+        <StatusPill
+          label="Confidence"
+          value={`${summary.confidenceLabel} ${summary.confidenceScore}%`}
+        />
+        <StatusPill label="Source gaps" value={String(summary.failedTools)} />
+      </div>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <AlphaVisualCard
+          footer={`${summary.successTools} usable / ${summary.totalTools} total`}
+          title="Source quality"
+        >
+          <ChartContainer
+            className="h-32 w-full"
+            config={alphaChartConfig}
+            initialDimension={{ height: 128, width: 220 }}
+          >
+            <BarChart accessibilityLayer data={summary.sourceQualityData}>
+              <CartesianGrid vertical={false} />
+              <XAxis
+                axisLine={false}
+                dataKey="label"
+                tickLine={false}
+                tickMargin={6}
+              />
+              <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+              <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                {summary.sourceQualityData.map((entry) => (
+                  <Cell fill={entry.fill} key={entry.label} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ChartContainer>
+        </AlphaVisualCard>
+
+        <AlphaVisualCard
+          footer={
+            summary.whaleTopLabel
+              ? `Largest ${summary.whaleTopLabel}`
+              : "No transfer value"
+          }
+          title="Whale transfers"
+        >
+          {summary.whaleBars.length ? (
+            <ChartContainer
+              className="h-32 w-full"
+              config={alphaChartConfig}
+              initialDimension={{ height: 128, width: 220 }}
+            >
+              <BarChart accessibilityLayer data={summary.whaleBars}>
+                <CartesianGrid vertical={false} />
+                <XAxis
+                  axisLine={false}
+                  dataKey="label"
+                  tickLine={false}
+                  tickMargin={6}
+                />
+                <YAxis hide />
+                <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                <Bar
+                  dataKey="amount"
+                  fill="var(--chart-2)"
+                  radius={[4, 4, 0, 0]}
+                />
+              </BarChart>
+            </ChartContainer>
+          ) : (
+            <EmptyVisualState text="Run a holder-flow prompt to chart transfer sizes." />
+          )}
+        </AlphaVisualCard>
+
+        <AlphaVisualCard
+          footer={
+            summary.marketTopLabel
+              ? `Top ${summary.marketTopLabel}`
+              : "No market datapoint"
+          }
+          title="Liquidity snapshot"
+        >
+          {summary.marketBars.length ? (
+            <ChartContainer
+              className="h-32 w-full"
+              config={alphaChartConfig}
+              initialDimension={{ height: 128, width: 220 }}
+            >
+              <BarChart accessibilityLayer data={summary.marketBars}>
+                <CartesianGrid vertical={false} />
+                <XAxis
+                  axisLine={false}
+                  dataKey="label"
+                  tickLine={false}
+                  tickMargin={6}
+                />
+                <YAxis hide />
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      formatter={(value) => formatCompactCurrencyValue(value)}
+                      hideLabel
+                    />
+                  }
+                />
+                <Bar
+                  dataKey="value"
+                  fill="var(--chart-3)"
+                  radius={[4, 4, 0, 0]}
+                />
+              </BarChart>
+            </ChartContainer>
+          ) : (
+            <EmptyVisualState text="Run a liquidity or market prompt to chart pool data." />
+          )}
+        </AlphaVisualCard>
+
+        <AlphaVisualCard
+          footer={
+            summary.yieldTopLabel
+              ? `Top ${summary.yieldTopLabel}`
+              : "No TVL or yield ranking"
+          }
+          title="TVL / yield ranking"
+        >
+          {summary.yieldBars.length ? (
+            <ChartContainer
+              className="h-32 w-full"
+              config={alphaChartConfig}
+              initialDimension={{ height: 128, width: 260 }}
+            >
+              <BarChart
+                accessibilityLayer
+                data={summary.yieldBars}
+                layout="vertical"
+              >
+                <CartesianGrid horizontal={false} />
+                <XAxis hide type="number" />
+                <YAxis
+                  axisLine={false}
+                  dataKey="label"
+                  tickLine={false}
+                  type="category"
+                  width={74}
+                />
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      formatter={(value) => formatCompactCurrencyValue(value)}
+                      hideLabel
+                    />
+                  }
+                />
+                <Bar
+                  dataKey="value"
+                  fill="var(--chart-4)"
+                  radius={[0, 4, 4, 0]}
+                />
+              </BarChart>
+            </ChartContainer>
+          ) : (
+            <EmptyVisualState text="Run a TVL or yield prompt to chart protocol ranking." />
+          )}
+        </AlphaVisualCard>
+
+        <AlphaVisualCard
+          footer={`${summary.confidenceLabel} confidence from ${summary.totalTools} tool checks`}
+          title="Confidence / risk"
+        >
+          <div className="relative">
+            <ChartContainer
+              className="h-32 w-full"
+              config={alphaChartConfig}
+              initialDimension={{ height: 128, width: 220 }}
+            >
+              <PieChart accessibilityLayer>
+                <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                <Pie
+                  data={summary.confidenceData}
+                  dataKey="value"
+                  innerRadius={34}
+                  nameKey="label"
+                  outerRadius={52}
+                  strokeWidth={2}
+                >
+                  {summary.confidenceData.map((entry) => (
+                    <Cell fill={entry.fill} key={entry.label} />
+                  ))}
+                </Pie>
+              </PieChart>
+            </ChartContainer>
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <span className="font-semibold text-foreground text-sm">
+                {summary.confidenceScore}%
+              </span>
+            </div>
+          </div>
+        </AlphaVisualCard>
+      </div>
+    </div>
+  );
+}
+
+function AlphaVisualCard({
+  children,
+  footer,
+  title,
+}: {
+  children: ReactNode;
+  footer: string;
+  title: string;
+}) {
+  return (
+    <div className="flex min-h-52 flex-col gap-2 rounded-md border bg-background p-2">
+      <p className="font-medium text-foreground text-sm">{title}</p>
+      <div className="min-h-32 flex-1">{children}</div>
+      <p className="line-clamp-2 min-h-8 text-muted-foreground text-xs">
+        {footer}
+      </p>
+    </div>
+  );
+}
+
+function EmptyVisualState({ text }: { text: string }) {
+  return (
+    <div className="flex h-32 items-center justify-center rounded-md bg-muted/30 px-3 text-center text-muted-foreground text-xs">
+      {text}
+    </div>
+  );
+}
+
+function buildOnChainVisualSummary(payload: OnChainToolFinalPayload) {
+  const successTools = payload.tools.filter(
+    (tool) => tool.status === "success"
+  ).length;
+  const failedTools = payload.tools.filter(
+    (tool) => tool.status === "failed"
+  ).length;
+  const skippedTools = payload.tools.filter(
+    (tool) => tool.status === "skipped"
+  ).length;
+  const totalTools = payload.tools.length;
+  const confidenceScore = calculateConfidenceScore({
+    failedTools,
+    skippedTools,
+    successTools,
+  });
+  const transferBars = getWhaleTransferBars(payload);
+  const marketSummary = getMarketVisualBars(payload);
+  const yieldSummary = getYieldVisualBars(payload);
+
+  return {
+    confidenceData: [
+      {
+        fill: "var(--chart-2)",
+        label: "Confidence",
+        value: confidenceScore,
+      },
+      {
+        fill: "var(--chart-5)",
+        label: "Risk / gaps",
+        value: Math.max(0, 100 - confidenceScore),
+      },
+    ],
+    confidenceLabel:
+      confidenceScore >= 80 ? "High" : confidenceScore >= 55 ? "Medium" : "Low",
+    confidenceScore,
+    failedTools,
+    marketBars: marketSummary.bars,
+    marketTopLabel: marketSummary.topLabel,
+    sourceQualityData: [
+      {
+        count: successTools,
+        fill: "var(--chart-2)",
+        label: "OK",
+      },
+      {
+        count: failedTools,
+        fill: "var(--chart-5)",
+        label: "Gap",
+      },
+      {
+        count: skippedTools,
+        fill: "var(--chart-3)",
+        label: "Skip",
+      },
+    ],
+    successTools,
+    totalTools,
+    whaleBars: transferBars.bars,
+    whaleTopLabel: transferBars.topLabel,
+    yieldBars: yieldSummary.bars,
+    yieldTopLabel: yieldSummary.topLabel,
+  };
+}
+
+function calculateConfidenceScore({
+  failedTools,
+  skippedTools,
+  successTools,
+}: {
+  failedTools: number;
+  skippedTools: number;
+  successTools: number;
+}) {
+  if (!successTools) {
+    return 20;
+  }
+
+  const base = 60;
+  const depthBonus = Math.min(25, successTools * 5);
+  const gapPenalty = failedTools * 15 + skippedTools * 8;
+
+  return Math.max(10, Math.min(100, base + depthBonus - gapPenalty));
+}
+
+function getWhaleTransferBars(payload: OnChainToolFinalPayload) {
+  const records = getRecordsForDomains(payload, ["smart_money"]);
+  const transfers = records
+    .map((record) => {
+      const amount = readTransferAmount(record);
+      const symbol =
+        readString(record.tokenSymbol) ||
+        readString(record.symbol) ||
+        readString(record.tokenName) ||
+        "token";
+
+      return {
+        amount,
+        hash: readString(record.hash),
+        symbol,
+      };
+    })
+    .filter((transfer) => transfer.amount > 0)
+    .sort((left, right) => right.amount - left.amount)
+    .slice(0, 5);
+
+  return {
+    bars: transfers.map((transfer, index) => ({
+      amount: transfer.amount,
+      label: `#${index + 1}`,
+    })),
+    topLabel: transfers[0]
+      ? `${formatCompactNumber(transfers[0].amount)} ${transfers[0].symbol}`
+      : "",
+  };
+}
+
+function getMarketVisualBars(payload: OnChainToolFinalPayload) {
+  const records = getRecordsForDomains(payload, [
+    "market_data",
+    "pair_liquidity",
+    "token_security",
+  ]);
+  const metrics = records
+    .map((record) => ({
+      fdv: readNumber(record.fdv) || readNumber(record.marketCap),
+      label: readPairLabel(record),
+      liquidity: readNumber(readRecord(record.liquidity)?.usd),
+      volume24h: readNumber(readRecord(record.volume)?.h24),
+    }))
+    .filter(
+      (item) =>
+        typeof item.liquidity === "number" ||
+        typeof item.volume24h === "number" ||
+        typeof item.fdv === "number"
+    )
+    .sort((left, right) => (right.liquidity ?? 0) - (left.liquidity ?? 0));
+  const top = metrics[0];
+
+  if (!top) {
+    return { bars: [], topLabel: "" };
+  }
+
+  return {
+    bars: [
+      { label: "Liq", value: top.liquidity ?? 0 },
+      { label: "Vol", value: top.volume24h ?? 0 },
+      { label: "FDV", value: top.fdv ?? 0 },
+    ].filter((item) => item.value > 0),
+    topLabel: `${top.label} ${formatCompactCurrency(top.liquidity ?? top.volume24h ?? top.fdv ?? 0)}`,
+  };
+}
+
+function getYieldVisualBars(payload: OnChainToolFinalPayload) {
+  const records = getRecordsForDomains(payload, ["defi_tvl", "yield_pools"]);
+  const mantleRecords = records.filter(isMantleRecord);
+  const scopedRecords = mantleRecords.length ? mantleRecords : records;
+  const ranked = scopedRecords
+    .map((record) => {
+      const value =
+        readNumber(record.tvlUsd) ||
+        readNumber(record.tvl) ||
+        readNumber(record.totalLiquidityUsd) ||
+        readMantleTvl(record);
+      const apy =
+        readNumber(record.apy) ||
+        readNumber(record.apyBase) ||
+        readNumber(record.apyReward);
+
+      return {
+        apy,
+        label: shortenChartLabel(
+          readString(record.project) ||
+            readString(record.symbol) ||
+            readString(record.name) ||
+            readString(record.slug) ||
+            "Pool"
+        ),
+        value: value ?? 0,
+      };
+    })
+    .filter((item) => item.value > 0)
+    .sort((left, right) => right.value - left.value)
+    .slice(0, 5);
+
+  return {
+    bars: ranked.map((item) => ({
+      label: item.label,
+      value: item.value,
+    })),
+    topLabel: ranked[0]
+      ? `${ranked[0].label} ${formatCompactCurrency(ranked[0].value)}${
+          typeof ranked[0].apy === "number" ? ` / ${ranked[0].apy.toFixed(2)}% APY` : ""
+        }`
+      : "",
+  };
+}
+
+function getRecordsForDomains(
+  payload: OnChainToolFinalPayload,
+  domains: OnChainToolResult["domain"][]
+) {
+  const domainSet = new Set(domains);
+
+  return payload.tools
+    .filter((tool) => domainSet.has(tool.domain))
+    .flatMap((tool) => getToolRecordSet(tool.data).records);
+}
+
+function readTransferAmount(record: Record<string, unknown>) {
+  const rawValue = readString(record.value);
+
+  if (rawValue) {
+    return parseTokenAmount(
+      rawValue,
+      readInteger(record.tokenDecimal, 18, 0, 36)
+    );
+  }
+
+  return (
+    readNumber(record.amount) ||
+    readNumber(record.valueUsd) ||
+    readNumber(record.usdValue) ||
+    0
+  );
+}
+
+function parseTokenAmount(value: string, decimals: number) {
+  if (value.includes(".")) {
+    return Number(value) || 0;
+  }
+
+  if (decimals <= 0) {
+    return Number(value) || 0;
+  }
+
+  try {
+    const raw = BigInt(value);
+    const base = BigInt(10) ** BigInt(decimals);
+    const whole = raw / base;
+    const fraction = raw % base;
+    const text = `${whole.toString()}.${fraction
+      .toString()
+      .padStart(decimals, "0")
+      .slice(0, 6)}`;
+
+    return Number(text) || 0;
+  } catch {
+    return Number(value) || 0;
+  }
+}
+
+function readPairLabel(record: Record<string, unknown>) {
+  const baseToken = readRecord(record.baseToken);
+  const quoteToken = readRecord(record.quoteToken);
+  const base =
+    readString(baseToken?.symbol) ||
+    readString(record.symbol) ||
+    readString(record.name) ||
+    "Pair";
+  const quote = readString(quoteToken?.symbol);
+
+  return shortenChartLabel(quote ? `${base}/${quote}` : base);
+}
+
+function isMantleRecord(record: Record<string, unknown>) {
+  const chain = readString(record.chain);
+
+  if (chain.toLowerCase() === "mantle") {
+    return true;
+  }
+
+  return Array.isArray(record.chains)
+    ? record.chains.some(
+        (item) => typeof item === "string" && item.toLowerCase() === "mantle"
+      )
+    : false;
+}
+
+function readMantleTvl(record: Record<string, unknown>) {
+  const chainTvls = readRecord(record.chainTvls);
+  const mantle = readRecord(chainTvls?.Mantle) || readRecord(chainTvls?.mantle);
+
+  return readNumber(mantle?.tvl);
+}
+
+function readInteger(
+  value: unknown,
+  fallback: number,
+  minimum: number,
+  maximum: number
+) {
+  const parsed =
+    typeof value === "number" ? value : Number.parseInt(String(value ?? ""), 10);
+
+  return Number.isFinite(parsed)
+    ? Math.min(Math.max(Math.trunc(parsed), minimum), maximum)
+    : fallback;
+}
+
+function shortenChartLabel(value: string) {
+  return value.length > 12 ? `${value.slice(0, 11)}...` : value;
+}
+
+function formatCompactCurrencyValue(value: unknown) {
+  return formatCompactCurrency(
+    typeof value === "number" ? value : Number(value) || 0
+  );
+}
+
+function formatCompactCurrency(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    currency: "USD",
+    maximumFractionDigits: value >= 1_000_000 ? 1 : 0,
+    notation: "compact",
+    style: "currency",
+  }).format(value);
+}
+
+function formatCompactNumber(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: value >= 1_000 ? 1 : 2,
+    notation: "compact",
+  }).format(value);
 }
 
 function getOnChainToolState(
@@ -1164,6 +1918,7 @@ function OnChainToolDataPreview({ tool }: { tool: OnChainToolResult }) {
               index={index}
               key={getRecordKey(record, index)}
               record={record}
+              sourceUrl={tool.sourceUrl}
             />
           ))}
         </div>
@@ -1171,22 +1926,24 @@ function OnChainToolDataPreview({ tool }: { tool: OnChainToolResult }) {
     );
   }
 
-  return (
-    <ToolOutput
-      className="[&_pre]:max-h-64"
-      errorText={undefined}
-      output={tool.data}
-    />
-  );
+  return <OnChainStructuredPreview data={tool.data} />;
 }
 
 function OnChainRecordPreview({
   index,
   record,
+  sourceUrl,
 }: {
   index: number;
   record: Record<string, unknown>;
+  sourceUrl?: string;
 }) {
+  const transfer = getTransferPreview(record, sourceUrl);
+
+  if (transfer) {
+    return <OnChainTransferRecordPreview transfer={transfer} />;
+  }
+
   const baseToken = readRecord(record.baseToken);
   const quoteToken = readRecord(record.quoteToken);
   const tokenAddress =
@@ -1211,8 +1968,14 @@ function OnChainRecordPreview({
   const liquidity = readNumber(readRecord(record.liquidity)?.usd);
   const volume24h = readNumber(readRecord(record.volume)?.h24);
   const marketCap = readNumber(record.marketCap) || readNumber(record.fdv);
+  const circulatingUsd =
+    readNumber(readRecord(record.circulating)?.peggedUSD) ||
+    readNumber(readRecord(record.circulating)?.usd) ||
+    readNumber(record.circulatingUsd);
   const boostAmount = readNumber(record.totalAmount) || readNumber(record.amount);
   const url = readString(record.url) || readString(record.sourceUrl);
+  const pegType = readString(record.pegType);
+  const pegMechanism = readString(record.pegMechanism);
 
   return (
     <div className="flex flex-col gap-1.5 px-2 py-2">
@@ -1235,9 +1998,14 @@ function OnChainRecordPreview({
         {typeof marketCap === "number" && (
           <span>Market cap {formatUsd(marketCap)}</span>
         )}
+        {typeof circulatingUsd === "number" && (
+          <span>Supply {formatUsd(circulatingUsd)}</span>
+        )}
         {typeof boostAmount === "number" && (
           <span>Boost {formatNumber(boostAmount)}</span>
         )}
+        {pegType && <span>Peg {pegType}</span>}
+        {pegMechanism && <span>Mechanism {pegMechanism}</span>}
       </div>
       {(tokenAddress || url) && (
         <div className="flex flex-col gap-1 text-xs">
@@ -1256,6 +2024,112 @@ function OnChainRecordPreview({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function OnChainTransferRecordPreview({
+  transfer,
+}: {
+  transfer: TransferPreview;
+}) {
+  return (
+    <div className="flex flex-col gap-2 px-2 py-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-medium text-foreground">
+          {transfer.amount} {transfer.symbol}
+        </span>
+        {transfer.tokenName && (
+          <StatusPill label="Token" value={transfer.tokenName} />
+        )}
+        {transfer.blockNumber && (
+          <StatusPill label="Block" value={transfer.blockNumber} />
+        )}
+        {transfer.confirmations && (
+          <StatusPill label="Conf" value={transfer.confirmations} />
+        )}
+      </div>
+      <div className="grid gap-2 text-xs sm:grid-cols-2">
+        <PreviewField label="From" value={transfer.from} />
+        <PreviewField label="To" value={transfer.to} />
+        {transfer.txHash && (
+          <PreviewField
+            href={transfer.txUrl}
+            label="Transaction"
+            value={transfer.txHash}
+          />
+        )}
+        {transfer.time && <PreviewField label="Time" value={transfer.time} />}
+        {transfer.contractAddress && (
+          <PreviewField label="Contract" value={transfer.contractAddress} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PreviewField({
+  href,
+  label,
+  value,
+}: {
+  href?: string;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="min-w-0 rounded border bg-background/60 px-2 py-1.5">
+      <p className="text-[11px] uppercase text-muted-foreground">{label}</p>
+      {href ? (
+        <a
+          className="mt-0.5 block break-all text-foreground underline underline-offset-2"
+          href={href}
+          rel="noreferrer"
+          target="_blank"
+        >
+          {value}
+        </a>
+      ) : (
+        <p className="mt-0.5 break-all text-foreground">{value}</p>
+      )}
+    </div>
+  );
+}
+
+function OnChainStructuredPreview({ data }: { data: unknown }) {
+  const preview = getStructuredPreview(data);
+
+  if (!preview) {
+    return (
+      <div className="rounded-md border bg-muted/20 px-2 py-2 text-sm">
+        <p className="font-medium text-foreground">Structured evidence</p>
+        <p className="mt-1 text-muted-foreground">
+          Evidence was captured. Use the source link and provider summary above
+          for review.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-md border bg-muted/20">
+      <div className="flex flex-wrap items-center gap-2 border-b px-2 py-1.5">
+        <p className="font-medium text-foreground">Structured evidence</p>
+        <StatusPill label="Fields" value={String(preview.fields.length)} />
+      </div>
+      <div className="grid gap-2 px-2 py-2 sm:grid-cols-2">
+        {preview.fields.map((field) => (
+          <div
+            className="rounded border bg-background/60 px-2 py-1.5"
+            key={field.label}
+          >
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              {field.label}
+            </p>
+            <p className="mt-0.5 break-words text-foreground">{field.value}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1325,6 +2199,7 @@ const onChainRecordKeys = [
   "tokenBalances",
   "protocols",
   "pools",
+  "peggedAssets",
 ];
 
 function findRecordSet(
@@ -1407,9 +2282,186 @@ function getRecordKey(record: Record<string, unknown>, index: number) {
     readString(record.pairAddress) ||
     readString(record.tokenAddress) ||
     readString(record.address) ||
+    readString(record.id) ||
+    readString(record.symbol) ||
     readString(readRecord(record.baseToken)?.address) ||
     `${index}`
   );
+}
+
+function getStructuredPreview(data: unknown) {
+  const root = readRecord(data);
+
+  if (!root) {
+    return null;
+  }
+
+  const fields = Object.entries(root)
+    .flatMap(([key, value]) => {
+      if (Array.isArray(value)) {
+        return [
+          {
+            label: formatRecordLabel(key),
+            value: `${value.length} records`,
+          },
+        ];
+      }
+
+      if (
+        typeof value === "string" ||
+        typeof value === "number" ||
+        typeof value === "boolean"
+      ) {
+        return [
+          {
+            label: formatRecordLabel(key),
+            value: String(value),
+          },
+        ];
+      }
+
+      const nested = readRecord(value);
+
+      if (!nested) {
+        return [];
+      }
+
+      const nestedFields = Object.entries(nested)
+        .filter(([, nestedValue]) =>
+          typeof nestedValue === "string" ||
+          typeof nestedValue === "number" ||
+          typeof nestedValue === "boolean"
+        )
+        .slice(0, 2)
+        .map(
+          ([nestedKey, nestedValue]) =>
+            `${formatRecordLabel(nestedKey)}: ${nestedValue}`
+        )
+        .join(", ");
+
+      return nestedFields
+        ? [
+            {
+              label: formatRecordLabel(key),
+              value: nestedFields,
+            },
+          ]
+        : [];
+    })
+    .slice(0, 6);
+
+  return fields.length ? { fields } : null;
+}
+
+type TransferPreview = {
+  amount: string;
+  blockNumber?: string;
+  confirmations?: string;
+  contractAddress?: string;
+  from: string;
+  symbol: string;
+  time?: string;
+  to: string;
+  tokenName?: string;
+  txHash?: string;
+  txUrl?: string;
+};
+
+function getTransferPreview(
+  record: Record<string, unknown>,
+  sourceUrl?: string
+): TransferPreview | null {
+  const from = readString(record.from);
+  const to = readString(record.to);
+  const rawValue = readString(record.value);
+
+  if (!from || !to || !rawValue) {
+    return null;
+  }
+
+  const symbol = readString(record.tokenSymbol) || "token";
+  const amount = formatTokenUnit(
+    rawValue,
+    readTokenDecimals(record.tokenDecimal)
+  );
+  const txHash = readString(record.hash);
+
+  return {
+    amount,
+    blockNumber: readString(record.blockNumber) || undefined,
+    confirmations: readString(record.confirmations) || undefined,
+    contractAddress: readString(record.contractAddress) || undefined,
+    from,
+    symbol,
+    time: formatUnixTimestamp(readString(record.timeStamp)),
+    to,
+    tokenName: readString(record.tokenName) || undefined,
+    txHash: txHash || undefined,
+    txUrl: txHash ? buildTxExplorerUrl(sourceUrl, txHash) : undefined,
+  };
+}
+
+function readTokenDecimals(value: unknown) {
+  const parsed = Number.parseInt(readString(value), 10);
+
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.min(parsed, 36) : 18;
+}
+
+function formatTokenUnit(rawValue: string, decimals: number) {
+  const raw = rawValue.trim();
+
+  if (!/^\d+$/.test(raw)) {
+    return rawValue;
+  }
+
+  if (decimals <= 0) {
+    return formatIntegerString(raw);
+  }
+
+  const padded = raw.padStart(decimals + 1, "0");
+  const whole = padded.slice(0, -decimals).replace(/^0+(?=\d)/, "") || "0";
+  const fraction = padded.slice(-decimals).slice(0, 6).replace(/0+$/, "");
+
+  return `${formatIntegerString(whole)}${fraction ? `.${fraction}` : ""}`;
+}
+
+function formatIntegerString(value: string) {
+  return value.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+function formatUnixTimestamp(value: string) {
+  if (!value) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+
+  if (!Number.isFinite(parsed)) {
+    return undefined;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(parsed * 1000));
+}
+
+function buildTxExplorerUrl(sourceUrl: string | undefined, txHash: string) {
+  if (!sourceUrl) {
+    return undefined;
+  }
+
+  try {
+    const chainId = new URL(sourceUrl).searchParams.get("chainid");
+
+    if (chainId === "5000") {
+      return `https://explorer.mantle.xyz/tx/${txHash}`;
+    }
+
+    return undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function readRecord(value: unknown): Record<string, unknown> | null {
@@ -1481,7 +2533,8 @@ function getMessageTokenUsage(message: StoredChatMessage) {
     };
   }
 
-  const actualUsage = message.directAnswer?.usage ?? message.result?.usage;
+  const actualUsage =
+    message.directAnswer?.usage ?? message.result?.usage ?? message.onChain?.usage;
 
   if (actualUsage) {
     const inputTokens = actualUsage.inputTokens ?? actualUsage.promptTokens;
@@ -1518,7 +2571,7 @@ function getMessageTokenUsage(message: StoredChatMessage) {
 }
 
 function getRouterUsage(message: StoredChatMessage) {
-  return message.directAnswer?.usage ?? message.result?.usage;
+  return message.directAnswer?.usage ?? message.result?.usage ?? message.onChain?.usage;
 }
 
 function getRouterUsageCostNeuron(
@@ -1605,6 +2658,11 @@ function formatNeuron(value: string) {
   try {
     const raw = BigInt(value);
     const base = BigInt("1000000000000000000");
+
+    if (raw > BigInt(0) && raw < base / BigInt(1000000)) {
+      return "<0.000001";
+    }
+
     const whole = raw / base;
     const fraction = raw % base;
     const fractionText = fraction.toString().padStart(18, "0").slice(0, 6);

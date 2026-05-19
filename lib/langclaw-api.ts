@@ -366,9 +366,11 @@ export type OnChainToolFinalPayload = {
   caveat: string;
   generatedAt: string;
   plan: OnChainPlanSummary;
+  proof?: ZeroGProof;
   recommendation: string;
   title: string;
   tools: OnChainToolResult[];
+  usage?: ModelUsageReceipt;
 };
 
 export type StoredChatMessage = {
@@ -787,6 +789,206 @@ export type UsageWithdrawRequestPayload = {
   functionName: "withdraw";
   balance: UsageBalance;
   note: string;
+};
+
+export type ProofDecision = {
+  agentId: string;
+  createdAt: string;
+  decisionHash: string;
+  decisionId: string;
+  evidenceUri: string;
+  explorerUrl?: string;
+  recorder: string;
+  runId: string;
+  signalType: string;
+  txHash?: string;
+};
+
+export type ProofDecisionsPayload = {
+  chainId: number;
+  configured: true;
+  decisions: ProofDecision[];
+  nextDecisionId: string;
+  registryAddress: string;
+};
+
+export type StrategyAction = "buy" | "sell" | "hold" | "exit";
+
+export type StrategyRecordStatus =
+  | "backtested"
+  | "paper-opened"
+  | "paper-closed";
+
+export type StrategyBacktestParams = {
+  initialCapitalUsd: number;
+  maxHoldHours: number;
+  minLiquidityUsd: number;
+  minMomentumBps: number;
+  minVolumeMultiple: number;
+  stopLossBps: number;
+  takeProfitBps: number;
+};
+
+export type StrategyMarketBar = {
+  liquidityUsd: number;
+  netWhaleFlowUsd?: number;
+  pairAddress: string;
+  priceUsd: number;
+  timestamp: string;
+  txCount?: number;
+  volumeUsd: number;
+};
+
+export type StrategyTrade = {
+  entryAt: string;
+  entryPriceUsd: number;
+  exitAt: string;
+  exitPriceUsd: number;
+  holdHours: number;
+  pnlBps: number;
+  pnlUsd: number;
+  reason: string;
+};
+
+export type StrategyEquityPoint = {
+  equityUsd: number;
+  timestamp: string;
+};
+
+export type StrategyMetrics = {
+  finalEquityUsd: number;
+  initialCapitalUsd: number;
+  maxDrawdownBps: number;
+  totalPnlBps: number;
+  totalPnlUsd: number;
+  tradeCount: number;
+  winRate: number;
+};
+
+export type StrategySignal = {
+  action: StrategyAction;
+  confidence: number;
+  liquidityUsd: number;
+  momentumBps: number;
+  priceUsd: number;
+  rationale: string;
+  volumeUsd: number;
+};
+
+export type TradingJournalProof = {
+  action: StrategyAction;
+  agentId: string;
+  chainId: number;
+  decisionHash: string;
+  error?: string;
+  evidenceUri: string;
+  explorerUrl?: string;
+  journalAddress?: string;
+  pnlBps: number;
+  recordId?: string;
+  resultHash: string;
+  status: "anchored" | "failed" | "pending" | "prepared";
+  strategyStatus: StrategyRecordStatus;
+  txHash?: string;
+};
+
+export type StrategyBacktestPayload = {
+  bars: StrategyMarketBar[];
+  equityCurve: StrategyEquityPoint[];
+  generatedAt: string;
+  latestSignal: StrategySignal;
+  market: string;
+  metrics: StrategyMetrics;
+  pairAddress: string;
+  params: StrategyBacktestParams;
+  proof?: TradingJournalProof;
+  queryId: string;
+  runId: string;
+  sourceUrl: string;
+  strategyId: string;
+  title: string;
+  trades: StrategyTrade[];
+};
+
+export type StrategyPaperTradePayload = {
+  action: StrategyAction;
+  confidence: number;
+  generatedAt: string;
+  market: string;
+  notionalUsd: number;
+  pairAddress: string;
+  proof: TradingJournalProof;
+  rationale: string;
+  referenceBacktestRunId: string;
+  runId: string;
+  strategyId: string;
+};
+
+export type StrategyRunRecord = {
+  action: StrategyAction;
+  agentId: string;
+  createdAt: string;
+  decisionHash: string;
+  evidenceUri: string;
+  explorerUrl?: string;
+  market: string;
+  pnlBps: number;
+  recordId: string;
+  recorder: string;
+  resultHash: string;
+  runId: string;
+  status: StrategyRecordStatus;
+  strategyId: string;
+  txHash?: string;
+};
+
+export type StrategyRunsPayload = {
+  chainId: number;
+  configured: boolean;
+  error?: string;
+  journalAddress?: string;
+  nextRecordId: string;
+  records: StrategyRunRecord[];
+};
+
+export type StrategyBacktestResponse = {
+  backtest: StrategyBacktestPayload;
+  configured: true;
+};
+
+export type StrategyPaperTradeResponse = {
+  configured: true;
+  paperTrade: StrategyPaperTradePayload;
+};
+
+export type AlphaWatchlistItem = {
+  addedAt: string;
+  agentId?: string;
+  caveat: string;
+  chain: string;
+  decisionHash?: string;
+  decisionId?: string;
+  evidenceUri?: string;
+  explorerUrl?: string;
+  gapCount: number;
+  id: string;
+  intent: string;
+  proofTx?: string;
+  recommendation: string;
+  signalType: string;
+  sourceCount: number;
+  subject: string;
+  summary: string;
+  title: string;
+};
+
+export type AlphaWatchlistPayload = {
+  cleared?: boolean;
+  configured: true;
+  deleted?: boolean;
+  item?: AlphaWatchlistItem;
+  itemId?: string;
+  items?: AlphaWatchlistItem[];
 };
 
 export type RouterPricing = {
@@ -1542,6 +1744,90 @@ export async function requestUsageWithdraw(wallet: WalletAuth) {
   const response = await postJson("/api/usage/withdraw/request", { wallet });
 
   return readJsonResponse<UsageWithdrawRequestPayload>(response);
+}
+
+export async function listProofDecisions(limit = 20) {
+  const response = await postJson("/api/proofs/decisions", { limit });
+
+  return readJsonResponse<ProofDecisionsPayload>(response);
+}
+
+export async function runStrategyBacktest(input: {
+  pairAddress?: string;
+  queryId?: string;
+}) {
+  const response = await postJson("/api/strategy/backtest", input);
+  const payload = await readJsonResponse<StrategyBacktestResponse>(response);
+
+  return payload.backtest;
+}
+
+export async function openStrategyPaperTrade(input: {
+  backtest: StrategyBacktestPayload;
+  notionalUsd?: number;
+}) {
+  const response = await postJson("/api/strategy/paper-trade", input);
+  const payload = await readJsonResponse<StrategyPaperTradeResponse>(response);
+
+  return payload.paperTrade;
+}
+
+export async function listStrategyRuns(limit = 25) {
+  const response = await postJson("/api/strategy/runs", { limit });
+
+  return readJsonResponse<StrategyRunsPayload>(response);
+}
+
+export async function listAlphaWatchlist(wallet: WalletAuth) {
+  const response = await postJson("/api/watchlist", {
+    action: "list",
+    wallet,
+  });
+  const payload = await readJsonResponse<AlphaWatchlistPayload>(response);
+
+  return payload.items ?? [];
+}
+
+export async function upsertAlphaWatchlistItem(
+  wallet: WalletAuth,
+  item: AlphaWatchlistItem,
+) {
+  const response = await postJson("/api/watchlist", {
+    action: "upsert",
+    item,
+    wallet,
+  });
+  const payload = await readJsonResponse<AlphaWatchlistPayload>(response);
+
+  if (!payload.item) {
+    throw new LangclawApiError("Watchlist item was not returned.", 500);
+  }
+
+  return payload.item;
+}
+
+export async function deleteAlphaWatchlistItem(
+  wallet: WalletAuth,
+  itemId: string,
+) {
+  const response = await postJson("/api/watchlist", {
+    action: "delete",
+    itemId,
+    wallet,
+  });
+  const payload = await readJsonResponse<AlphaWatchlistPayload>(response);
+
+  return Boolean(payload.deleted);
+}
+
+export async function clearAlphaWatchlist(wallet: WalletAuth) {
+  const response = await postJson("/api/watchlist", {
+    action: "clear",
+    wallet,
+  });
+  const payload = await readJsonResponse<AlphaWatchlistPayload>(response);
+
+  return Boolean(payload.cleared);
 }
 
 export function dispatchChatSessionsUpdated() {
