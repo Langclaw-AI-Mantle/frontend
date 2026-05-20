@@ -910,6 +910,29 @@ export type StrategyBacktestPayload = {
   trades: StrategyTrade[];
 };
 
+export type StrategyScanCandidate = {
+  latestSignal: StrategySignal;
+  latestTimestamp: string;
+  market: string;
+  metrics: StrategyMetrics;
+  pairAddress: string;
+  rank: number;
+  rowCount: number;
+  score: number;
+  scoreReason: string;
+  totalVolumeUsd: number;
+};
+
+export type StrategyScanPayload = {
+  bestBacktest: StrategyBacktestPayload;
+  candidates: StrategyScanCandidate[];
+  generatedAt: string;
+  queryId: string;
+  scannedPairs: number;
+  selectedPairAddress: string;
+  sourceUrl: string;
+};
+
 export type StrategyPaperTradePayload = {
   action: StrategyAction;
   confidence: number;
@@ -959,6 +982,11 @@ export type StrategyBacktestResponse = {
 export type StrategyPaperTradeResponse = {
   configured: true;
   paperTrade: StrategyPaperTradePayload;
+};
+
+export type StrategyScanResponse = {
+  configured: true;
+  scan: StrategyScanPayload;
 };
 
 export type AlphaWatchlistItem = {
@@ -1760,6 +1788,16 @@ export async function runStrategyBacktest(input: {
   const payload = await readJsonResponse<StrategyBacktestResponse>(response);
 
   return payload.backtest;
+}
+
+export async function scanStrategyPairs(input: {
+  limit?: number;
+  queryId?: string;
+}) {
+  const response = await postJson("/api/strategy/scan-pairs", input);
+  const payload = await readJsonResponse<StrategyScanResponse>(response);
+
+  return payload.scan;
 }
 
 export async function openStrategyPaperTrade(input: {

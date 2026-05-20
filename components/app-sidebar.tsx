@@ -37,6 +37,7 @@ import {
   ShieldCheck,
   Trash2,
   User2,
+  Wallet,
 } from "lucide-react";
 import {
   Collapsible,
@@ -84,11 +85,12 @@ import {
   useWalletSession,
   WALLET_AUTH_UPDATED_EVENT,
 } from "@/hooks/use-wallet-session";
+import { Badge } from "./ui/badge";
 
 export function AppSidebar() {
   const { isConnected, address } = useConnection();
   const { getWalletAuth } = useWalletSession();
-  const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
+  // const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
   const [sessionsError, setSessionsError] = useState("");
@@ -147,18 +149,18 @@ export function AppSidebar() {
     return () => window.clearTimeout(timeoutId);
   }, [refreshSessions]);
 
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      void checkBackendHealth()
-        .then(() => setBackendOnline(true))
-        .catch(() => {
-          setBackendOnline(false);
-          toast.error("Backend offline");
-        });
-    }, 0);
+  // useEffect(() => {
+  //   const timeoutId = window.setTimeout(() => {
+  //     void checkBackendHealth()
+  //       .then(() => setBackendOnline(true))
+  //       .catch(() => {
+  //         setBackendOnline(false);
+  //         toast.error("Backend offline");
+  //       });
+  //   }, 0);
 
-    return () => window.clearTimeout(timeoutId);
-  }, []);
+  //   return () => window.clearTimeout(timeoutId);
+  // }, []);
 
   useEffect(() => {
     window.addEventListener(CHAT_SESSIONS_UPDATED_EVENT, refreshSessions);
@@ -182,11 +184,11 @@ export function AppSidebar() {
           current.map((item) =>
             item.id === session.id
               ? {
-                ...item,
-                ...(updated ?? {}),
-                messages: item.messages,
-                pinned: updated?.pinned ?? !session.pinned,
-              }
+                  ...item,
+                  ...(updated ?? {}),
+                  messages: item.messages,
+                  pinned: updated?.pinned ?? !session.pinned,
+                }
               : item,
           ),
         );
@@ -228,11 +230,11 @@ export function AppSidebar() {
         current.map((item) =>
           item.id === renameTarget.id
             ? {
-              ...item,
-              ...(updated ?? {}),
-              messages: item.messages,
-              title: updated?.title ?? title,
-            }
+                ...item,
+                ...(updated ?? {}),
+                messages: item.messages,
+                title: updated?.title ?? title,
+              }
             : item,
         ),
       );
@@ -247,29 +249,26 @@ export function AppSidebar() {
     }
   }, [getWalletAuth, renameTarget, renameTitle]);
 
-  const handleConfirmDelete = useCallback(
-    async () => {
-      if (!deleteTarget) {
-        return;
-      }
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deleteTarget) {
+      return;
+    }
 
-      try {
-        const wallet = await getWalletAuth();
-        await deleteChatSession(wallet, deleteTarget.id);
-        setSessions((current) =>
-          current.filter((session) => session.id !== deleteTarget.id),
-        );
-        setDeleteTarget(null);
-        dispatchChatSessionsUpdated();
-        toast.success("Chat deleted");
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : "Unable to delete chat.",
-        );
-      }
-    },
-    [deleteTarget, getWalletAuth],
-  );
+    try {
+      const wallet = await getWalletAuth();
+      await deleteChatSession(wallet, deleteTarget.id);
+      setSessions((current) =>
+        current.filter((session) => session.id !== deleteTarget.id),
+      );
+      setDeleteTarget(null);
+      dispatchChatSessionsUpdated();
+      toast.success("Chat deleted");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Unable to delete chat.",
+      );
+    }
+  }, [deleteTarget, getWalletAuth]);
 
   // if (isReconnecting) {
   //   <p>hai</p>;
@@ -277,43 +276,10 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader>
+      <SidebarHeader className="border-b">
         <Link href={"/"}>
           <span className="text-lg font-bold mb-5">Langclaw</span>
         </Link>
-        <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
-          <span
-            className={`size-2 rounded-full ${backendOnline === null
-                ? "bg-muted-foreground/40"
-                : backendOnline
-                  ? "bg-emerald-500"
-                  : "bg-destructive"
-              }`}
-          />
-          <span>
-            {backendOnline === false ? "Backend offline" : "Backend online"}
-          </span>
-        </div>
-        {isConnected && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Connected</CardTitle>
-              <CardDescription>
-                <p>{chains[0].name}</p>
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-1">
-                <p>
-                  {address
-                    ? `${address.slice(0, 6)}...${address.slice(-4)}`
-                    : ""}
-                </p>
-                <p>{balanceLabel ? `(${balanceLabel})` : null}</p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
         <SidebarMenuItem>
           <SidebarMenuButton asChild>
             <Link href="/chat">
@@ -457,9 +423,12 @@ export function AppSidebar() {
                 <DropdownMenuTrigger asChild>
                   <SidebarMenuButton className="bg-primary text-primary-foreground">
                     <User2 />
-                    {address
-                      ? `${address.slice(0, 6)}...${address.slice(-4)}`
-                      : "Wallet"}
+                    <p>
+                      {address
+                        ? `${address.slice(0, 4)}...${address.slice(-4)}`
+                        : "Wallet"}
+                    </p>
+                    <Badge variant={"secondary"}>{chains[0].name}</Badge>
                   </SidebarMenuButton>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>

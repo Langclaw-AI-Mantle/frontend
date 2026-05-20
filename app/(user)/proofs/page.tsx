@@ -30,6 +30,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import {
   listProofDecisions,
   listStrategyRuns,
   readFriendlyError,
@@ -158,123 +164,143 @@ export default function ProofsPage() {
         </Alert>
       )}
 
-      <section className="grid gap-4 md:grid-cols-4">
-        <MetricCard label="Next decision ID" value={stats.nextDecisionId} />
-        <MetricCard label="Loaded proofs" value={String(decisions.length)} />
-        <MetricCard label="Explorer links" value={String(stats.txCount)} />
-        <MetricCard label="Signal types" value={String(stats.signalTypes)} />
-      </section>
+      <Tabs className="gap-4" defaultValue="strategy">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <TabsList className="w-full md:w-fit">
+            <TabsTrigger value="strategy">
+              <FlaskConicalIcon data-icon="inline-start" />
+              Strategy Proofs
+            </TabsTrigger>
+            <TabsTrigger value="registry">
+              <ShieldCheckIcon data-icon="inline-start" />
+              Agent Decisions
+            </TabsTrigger>
+          </TabsList>
+          <Badge variant="outline">Mantle chain 5000</Badge>
+        </div>
 
-      <Card className="rounded-lg" size="sm">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <DatabaseIcon className="size-4 text-muted-foreground" />
-            Registry
-          </CardTitle>
-          <CardDescription className="break-all">
-            {payload?.registryAddress ?? "Waiting for backend response"}
-          </CardDescription>
-          <CardAction>
-            <Badge variant="secondary">
-              Chain {payload?.chainId ?? "5000"}
-            </Badge>
-          </CardAction>
-        </CardHeader>
-      </Card>
+        <TabsContent className="space-y-4" value="strategy">
+          <section className="grid gap-4 md:grid-cols-4">
+            <MetricCard label="Next strategy ID" value={strategyStats.nextRecordId} />
+            <MetricCard label="Strategy proofs" value={String(strategyStats.records)} />
+            <MetricCard label="Journal txs" value={String(strategyStats.anchored)} />
+            <MetricCard label="Strategies" value={String(strategyStats.strategies)} />
+          </section>
 
-      <Card className="rounded-lg" size="sm">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ShieldCheckIcon className="size-4 text-muted-foreground" />
-            Recorded Decisions
-          </CardTitle>
-          <CardDescription>
-            Latest registry entries used by Langclaw to prove decisions and
-            outcomes.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {decisions.length ? (
-            <Table className="min-w-[820px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Signal</TableHead>
-                  <TableHead>Agent</TableHead>
-                  <TableHead>Run</TableHead>
-                  <TableHead>Recorded</TableHead>
-                  <TableHead className="text-right">Proof</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {decisions.map((decision) => (
-                  <DecisionRow decision={decision} key={decision.decisionId} />
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <p className="text-muted-foreground text-sm">
-              {loading ? "Loading proof records..." : "No proof records loaded."}
-            </p>
-          )}
-        </CardContent>
-      </Card>
+          <Card className="rounded-lg" size="sm">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FlaskConicalIcon className="size-4 text-muted-foreground" />
+                Trading Journal
+              </CardTitle>
+              <CardDescription className="break-all">
+                {strategyPayload?.journalAddress ??
+                  strategyPayload?.error ??
+                  "Waiting for strategy journal response"}
+              </CardDescription>
+              <CardAction>
+                <Badge variant="secondary">
+                  {strategyStats.anchored} anchored
+                </Badge>
+              </CardAction>
+            </CardHeader>
+            <CardContent>
+              {strategyRecords.length ? (
+                <Table className="min-w-[900px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>ID</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Action</TableHead>
+                      <TableHead>Market</TableHead>
+                      <TableHead>PnL</TableHead>
+                      <TableHead>Recorded</TableHead>
+                      <TableHead className="text-right">Proof</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {strategyRecords.map((record) => (
+                      <StrategyRow key={record.recordId} record={record} />
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <p className="text-muted-foreground text-sm">
+                  {loading
+                    ? "Loading strategy records..."
+                    : strategyPayload?.configured === false
+                      ? "Strategy journal address is not configured yet."
+                      : "No strategy proof records loaded."}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-      <section className="grid gap-4 md:grid-cols-4">
-        <MetricCard label="Next strategy ID" value={strategyStats.nextRecordId} />
-        <MetricCard label="Strategy proofs" value={String(strategyStats.records)} />
-        <MetricCard label="Journal txs" value={String(strategyStats.anchored)} />
-        <MetricCard label="Strategies" value={String(strategyStats.strategies)} />
-      </section>
+        <TabsContent className="space-y-4" value="registry">
+          <section className="grid gap-4 md:grid-cols-4">
+            <MetricCard label="Next decision ID" value={stats.nextDecisionId} />
+            <MetricCard label="Loaded proofs" value={String(decisions.length)} />
+            <MetricCard label="Explorer links" value={String(stats.txCount)} />
+            <MetricCard label="Signal types" value={String(stats.signalTypes)} />
+          </section>
 
-      <Card className="rounded-lg" size="sm">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FlaskConicalIcon className="size-4 text-muted-foreground" />
-            Strategy Proofs
-          </CardTitle>
-          <CardDescription className="break-all">
-            {strategyPayload?.journalAddress ??
-              strategyPayload?.error ??
-              "Waiting for strategy journal response"}
-          </CardDescription>
-          <CardAction>
-            <Badge variant="secondary">
-              Chain {strategyPayload?.chainId ?? "5000"}
-            </Badge>
-          </CardAction>
-        </CardHeader>
-        <CardContent>
-          {strategyRecords.length ? (
-            <Table className="min-w-[900px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Action</TableHead>
-                  <TableHead>Market</TableHead>
-                  <TableHead>PnL</TableHead>
-                  <TableHead>Recorded</TableHead>
-                  <TableHead className="text-right">Proof</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {strategyRecords.map((record) => (
-                  <StrategyRow key={record.recordId} record={record} />
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <p className="text-muted-foreground text-sm">
-              {loading
-                ? "Loading strategy records..."
-                : strategyPayload?.configured === false
-                  ? "Strategy journal address is not configured yet."
-                  : "No strategy proof records loaded."}
-            </p>
-          )}
-        </CardContent>
-      </Card>
+          <Card className="rounded-lg" size="sm">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DatabaseIcon className="size-4 text-muted-foreground" />
+                Registry
+              </CardTitle>
+              <CardDescription className="break-all">
+                {payload?.registryAddress ?? "Waiting for backend response"}
+              </CardDescription>
+              <CardAction>
+                <Badge variant="secondary">{stats.txCount} tx links</Badge>
+              </CardAction>
+            </CardHeader>
+          </Card>
+
+          <Card className="rounded-lg" size="sm">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ShieldCheckIcon className="size-4 text-muted-foreground" />
+                Recorded Decisions
+              </CardTitle>
+              <CardDescription>
+                Latest registry entries used by Langclaw to prove decisions and
+                outcomes.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {decisions.length ? (
+                <Table className="min-w-[820px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>ID</TableHead>
+                      <TableHead>Signal</TableHead>
+                      <TableHead>Agent</TableHead>
+                      <TableHead>Run</TableHead>
+                      <TableHead>Recorded</TableHead>
+                      <TableHead className="text-right">Proof</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {decisions.map((decision) => (
+                      <DecisionRow decision={decision} key={decision.decisionId} />
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <p className="text-muted-foreground text-sm">
+                  {loading
+                    ? "Loading proof records..."
+                    : "No proof records loaded."}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

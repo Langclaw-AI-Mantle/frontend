@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
   AlertCircleIcon,
@@ -7,6 +8,7 @@ import {
   FlaskConicalIcon,
   PlayIcon,
   RefreshCcwIcon,
+  SearchIcon,
   ShieldCheckIcon,
 } from "lucide-react";
 import {
@@ -36,6 +38,7 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -56,8 +59,11 @@ import {
   openStrategyPaperTrade,
   readFriendlyError,
   runStrategyBacktest,
+  scanStrategyPairs,
   type StrategyBacktestPayload,
   type StrategyPaperTradePayload,
+  type StrategyScanCandidate,
+  type StrategyScanPayload,
   type StrategyTrade,
   type TradingJournalProof,
 } from "@/lib/langclaw-api";
@@ -88,8 +94,12 @@ export default function StrategyPage() {
   const [paperTrade, setPaperTrade] = useState<StrategyPaperTradePayload | null>(
     null,
   );
+  const [pairScan, setPairScan] = useState<StrategyScanPayload | null>(null);
+  const [backtestSource, setBacktestSource] = useState<
+    "" | "anchored" | "scan"
+  >("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState<"backtest" | "paper" | "">("");
+  const [loading, setLoading] = useState<"backtest" | "paper" | "scan" | "">("");
 
   const pairAddress = useMemo(() => {
     const custom = customPair.trim();
@@ -115,6 +125,70 @@ export default function StrategyPage() {
   const recordedPaperDecisionCopy = getPaperDecisionCopy(
     paperTrade?.action ?? "hold",
   );
+  const isScanPreview = backtestSource === "scan";
+  const hasAnchoredBacktest = backtestSource === "anchored" && Boolean(backtest);
+  const hasPaperDecision = Boolean(paperTrade);
+  const demoProgress = hasPaperDecision
+    ? 100
+    : hasAnchoredBacktest
+      ? 75
+      : pairScan
+        ? 50
+        : 25;
+  const demoSteps = [
+    {
+      label: "Scan",
+      state: pairScan ? "done" : loading === "scan" ? "active" : "ready",
+      value: pairScan ? shortHash(pairScan.selectedPairAddress) : "Ready",
+    },
+    {
+      label: "Backtest",
+      state: hasAnchoredBacktest
+        ? "done"
+        : loading === "backtest"
+          ? "active"
+          : isScanPreview
+            ? "ready"
+            : "locked",
+      value: hasAnchoredBacktest
+        ? "Anchored"
+        : isScanPreview
+          ? "Preview"
+          : "Waiting",
+    },
+    {
+      label: "Paper",
+      state: hasPaperDecision
+        ? "done"
+        : loading === "paper"
+          ? "active"
+          : hasAnchoredBacktest
+            ? "ready"
+            : "locked",
+      value: hasPaperDecision
+        ? paperTrade?.action.toUpperCase()
+        : hasAnchoredBacktest
+          ? "Ready"
+          : "Locked",
+    },
+    {
+      label: "Proof",
+      state: hasPaperDecision ? "done" : "locked",
+      value:
+        paperTrade?.proof.status === "anchored"
+          ? "Mantle tx"
+          : hasPaperDecision
+            ? paperTrade?.proof.status
+            : "Waiting",
+    },
+  ];
+  const guidedActionLabel = !pairScan
+    ? "Scan Best Pair"
+    : !hasAnchoredBacktest
+      ? "Anchor Backtest"
+      : !hasPaperDecision
+        ? latestPaperDecisionCopy.buttonLabel
+        : "Open Proof Center";
 
   const handleRunBacktest = async () => {
     setLoading("backtest");
@@ -127,6 +201,7 @@ export default function StrategyPage() {
         queryId: queryId.trim() || undefined,
       });
       setBacktest(nextBacktest);
+      setBacktestSource("anchored");
       toast.success("Backtest completed", {
         description: nextBacktest.title,
       });
@@ -137,6 +212,54 @@ export default function StrategyPage() {
     } finally {
       setLoading("");
     }
+  };
+
+  const handleScanPairs = async () => {
+    setLoading("scan");
+    setError("");
+    setPaperTrade(null);
+
+    try {
+      const nextScan = await scanStrategyPairs({
+        limit: 12,
+        queryId: queryId.trim() || undefined,
+      });
+      setPairScan(nextScan);
+      setBacktest(nextScan.bestBacktest);
+      setBacktestSource("scan");
+      setCustomPair(nextScan.selectedPairAddress);
+      setSelectedPair("default");
+      toast.success("Best pair selected", {
+        description: `${shortHash(nextScan.selectedPairAddress)} scored ${nextScan.candidates[0]?.score ?? 0}. Click Run Backtest to anchor proof.`,
+      });
+    } catch (err) {
+      const message = readFriendlyError(err, "Unable to scan Mantle pairs.");
+      setError(message);
+      toast.error(message);
+    } finally {
+      setLoading("");
+    }
+  };
+
+  const handleUseCandidate = (candidate: StrategyScanCandidate) => {
+    setSelectedPair("default");
+    setCustomPair(candidate.pairAddress);
+    setPaperTrade(null);
+
+    if (
+      pairScan?.bestBacktest.pairAddress.toLowerCase() ===
+      candidate.pairAddress.toLowerCase()
+    ) {
+      setBacktest(pairScan.bestBacktest);
+      setBacktestSource("scan");
+    } else {
+      setBacktest(null);
+      setBacktestSource("");
+    }
+
+    toast.success("Pair selected", {
+      description: `${shortHash(candidate.pairAddress)} is ready for Run Backtest.`,
+    });
   };
 
   const handleOpenPaperTrade = async () => {
@@ -187,6 +310,46 @@ export default function StrategyPage() {
         </Alert>
       )}
 
+      <DemoRunway progress={demoProgress} steps={demoSteps}>
+        {hasPaperDecision ? (
+          <Button asChild>
+            <Link href="/proofs">
+              <ShieldCheckIcon data-icon="inline-start" />
+              {guidedActionLabel}
+            </Link>
+          </Button>
+        ) : (
+          <Button
+            disabled={Boolean(loading)}
+            onClick={() => {
+              if (!pairScan) {
+                void handleScanPairs();
+                return;
+              }
+
+              if (!hasAnchoredBacktest) {
+                void handleRunBacktest();
+                return;
+              }
+
+              void handleOpenPaperTrade();
+            }}
+            type="button"
+          >
+            {loading ? (
+              <RefreshCcwIcon data-icon="inline-start" />
+            ) : !pairScan ? (
+              <SearchIcon data-icon="inline-start" />
+            ) : !hasAnchoredBacktest ? (
+              <PlayIcon data-icon="inline-start" />
+            ) : (
+              <ArrowUpRightIcon data-icon="inline-start" />
+            )}
+            {guidedActionLabel}
+          </Button>
+        )}
+      </DemoRunway>
+
       <section className="grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
         <Card className="rounded-lg" size="sm">
           <CardHeader>
@@ -234,18 +397,34 @@ export default function StrategyPage() {
                   value={queryId}
                 />
               </label>
-              <Button
-                disabled={loading === "backtest"}
-                onClick={() => void handleRunBacktest()}
-                type="button"
-              >
-                {loading === "backtest" ? (
-                  <RefreshCcwIcon data-icon="inline-start" />
-                ) : (
-                  <PlayIcon data-icon="inline-start" />
-                )}
-                Run Backtest
-              </Button>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Button
+                  disabled={Boolean(loading)}
+                  onClick={() => void handleScanPairs()}
+                  type="button"
+                  variant={pairScan ? "outline" : "default"}
+                >
+                  {loading === "scan" ? (
+                    <RefreshCcwIcon data-icon="inline-start" />
+                  ) : (
+                    <SearchIcon data-icon="inline-start" />
+                  )}
+                  Scan Pairs
+                </Button>
+                <Button
+                  disabled={Boolean(loading)}
+                  onClick={() => void handleRunBacktest()}
+                  type="button"
+                  variant={isScanPreview ? "default" : "outline"}
+                >
+                  {loading === "backtest" ? (
+                    <RefreshCcwIcon data-icon="inline-start" />
+                  ) : (
+                    <PlayIcon data-icon="inline-start" />
+                  )}
+                  Run Backtest
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -270,6 +449,13 @@ export default function StrategyPage() {
           </CardContent>
         </Card>
       </section>
+
+      {pairScan && (
+        <ScanPairsPanel
+          onUseCandidate={handleUseCandidate}
+          scan={pairScan}
+        />
+      )}
 
       {backtest ? (
         <>
@@ -357,19 +543,27 @@ export default function StrategyPage() {
                   />
                   <Alert>
                     <ShieldCheckIcon />
-                    <AlertTitle>{latestPaperDecisionCopy.title}</AlertTitle>
+                    <AlertTitle>
+                      {isScanPreview
+                        ? "Scan preview selected"
+                        : latestPaperDecisionCopy.title}
+                    </AlertTitle>
                     <AlertDescription>
-                      {latestPaperDecisionCopy.description}
+                      {isScanPreview
+                        ? "Run Backtest to anchor this pair before recording a paper decision."
+                        : latestPaperDecisionCopy.description}
                     </AlertDescription>
                   </Alert>
                   <Button
-                    disabled={loading === "paper"}
+                    disabled={Boolean(loading) || isScanPreview}
                     onClick={() => void handleOpenPaperTrade()}
                     type="button"
                     variant="secondary"
                   >
                     <ArrowUpRightIcon data-icon="inline-start" />
-                    {latestPaperDecisionCopy.buttonLabel}
+                    {isScanPreview
+                      ? "Run Backtest First"
+                      : latestPaperDecisionCopy.buttonLabel}
                   </Button>
                 </div>
               </CardContent>
@@ -437,6 +631,68 @@ export default function StrategyPage() {
   );
 }
 
+function DemoRunway({
+  children,
+  progress,
+  steps,
+}: {
+  children: React.ReactNode;
+  progress: number;
+  steps: Array<{
+    label: string;
+    state: string;
+    value?: string;
+  }>;
+}) {
+  return (
+    <section className="rounded-lg border bg-[linear-gradient(135deg,var(--accent),var(--background)_42%,var(--secondary))] p-4 shadow-xs">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="font-semibold text-base">Strategy demo runway</h2>
+            <Badge variant="outline">Mantle verifiable</Badge>
+          </div>
+          <p className="mt-1 max-w-2xl text-muted-foreground text-sm">
+            One guided path from pair discovery to backtest, paper decision, and
+            on-chain proof.
+          </p>
+        </div>
+        <div className="shrink-0">{children}</div>
+      </div>
+      <div className="mt-4">
+        <Progress aria-label="Strategy demo progress" value={progress} />
+      </div>
+      <div className="mt-4 grid gap-2 md:grid-cols-4">
+        {steps.map((step, index) => (
+          <div
+            className="flex min-w-0 items-center gap-3 rounded-md border bg-background/70 px-3 py-2"
+            key={step.label}
+          >
+            <span
+              className={[
+                "flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold",
+                step.state === "done"
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : step.state === "active" || step.state === "ready"
+                    ? "border-primary/30 bg-primary/10 text-primary"
+                    : "border-border bg-muted text-muted-foreground",
+              ].join(" ")}
+            >
+              {step.state === "done" ? "OK" : index + 1}
+            </span>
+            <div className="min-w-0">
+              <p className="truncate font-medium text-sm">{step.label}</p>
+              <p className="truncate text-muted-foreground text-xs">
+                {step.value}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function MetricCard({ label, value }: { label: string; value: string }) {
   return (
     <Card className="rounded-lg" size="sm">
@@ -454,6 +710,129 @@ function Rule({ label, value }: { label: string; value: string }) {
       <span className="text-muted-foreground">{label}</span>
       <span className="truncate font-medium">{value}</span>
     </div>
+  );
+}
+
+function ScanPairsPanel({
+  onUseCandidate,
+  scan,
+}: {
+  onUseCandidate: (candidate: StrategyScanCandidate) => void;
+  scan: StrategyScanPayload;
+}) {
+  const bestCandidate = scan.candidates[0];
+
+  return (
+    <Card className="rounded-lg" size="sm">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <SearchIcon />
+          Best Mantle pair found
+        </CardTitle>
+        <CardDescription>
+          Scanned {scan.scannedPairs} pair(s) from Dune query {scan.queryId}.
+          Scan ranking does not write on-chain; Run Backtest anchors the chosen
+          pair.
+        </CardDescription>
+        {bestCandidate && (
+          <CardAction>
+            <Badge variant="secondary">Score {bestCandidate.score}</Badge>
+          </CardAction>
+        )}
+      </CardHeader>
+      <CardContent>
+        {bestCandidate && (
+          <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_2fr]">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Rule
+                label="Selected pair"
+                value={shortHash(scan.selectedPairAddress)}
+              />
+              <Rule
+                label="Backtest PnL"
+                value={formatSignedBps(bestCandidate.metrics.totalPnlBps)}
+              />
+              <Rule
+                label="Win rate"
+                value={`${bestCandidate.metrics.winRate}%`}
+              />
+              <Rule
+                label="Latest signal"
+                value={bestCandidate.latestSignal.action.toUpperCase()}
+              />
+            </div>
+            <div className="rounded-md border bg-muted/40 px-3 py-2">
+              <p className="font-medium text-sm">Why this pair</p>
+              <p className="mt-1 text-muted-foreground text-sm">
+                {bestCandidate.scoreReason}
+              </p>
+            </div>
+          </div>
+        )}
+        <div className="overflow-x-auto">
+          <Table className="min-w-[880px]">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Rank</TableHead>
+                <TableHead>Pair</TableHead>
+                <TableHead>Signal</TableHead>
+                <TableHead className="text-right">Trades</TableHead>
+                <TableHead className="text-right">PnL</TableHead>
+                <TableHead className="text-right">Win</TableHead>
+                <TableHead className="text-right">Drawdown</TableHead>
+                <TableHead className="text-right">Volume</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {scan.candidates.map((candidate) => (
+                <TableRow key={candidate.pairAddress}>
+                  <TableCell>{candidate.rank}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span>{shortHash(candidate.pairAddress)}</span>
+                      <span className="text-muted-foreground text-xs">
+                        {candidate.rowCount} rows / score {candidate.score}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline">
+                      {candidate.latestSignal.action.toUpperCase()}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {candidate.metrics.tradeCount}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatSignedBps(candidate.metrics.totalPnlBps)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {candidate.metrics.winRate}%
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {candidate.metrics.maxDrawdownBps} bps
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatUsd(candidate.totalVolumeUsd)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      onClick={() => onUseCandidate(candidate)}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      Use
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
