@@ -12,7 +12,6 @@ import {
   YAxis,
 } from "recharts";
 import {
-  ActivityIcon,
   BookmarkCheckIcon,
   BookmarkPlusIcon,
   CopyIcon,
@@ -57,12 +56,6 @@ import {
   PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select";
-import {
   Confirmation,
   ConfirmationAction,
   ConfirmationActions,
@@ -96,6 +89,7 @@ import {
 import {
   DiscoverDetails,
   isWorkflowStreaming,
+  ResearchReportPanel,
   StatusPill,
   WorkflowPlan,
 } from "@/components/LangclawResult";
@@ -134,6 +128,8 @@ import type { Experimental_TranscriptionResult } from "ai";
 import {
   listAlphaWatchlist,
   dispatchChatSessionsUpdated,
+  type DefiRankingCoverage,
+  type DefiRankingMetrics,
   getChatSession,
   isWalletSignatureRequiredError,
   readFriendlyError,
@@ -142,7 +138,7 @@ import {
   type ModelUsageReceipt,
   type OnChainToolFinalPayload,
   type OnChainToolResult,
-  type RouterModel,
+  type ResearchReportEntity,
   type ChatSession,
   type StoredChatMessage,
   upsertAlphaWatchlistItem,
@@ -151,9 +147,9 @@ import {
 import { useWalletSession } from "@/hooks/use-wallet-session";
 import {
   DEFAULT_CHAT_MODEL_ID,
-  getModelLabel,
-  useRouterModels,
-} from "@/hooks/use-router-models";
+  FIXED_CHAT_MODEL_LABEL,
+  resolveChatModel,
+} from "@/lib/chat-model";
 import { cn } from "@/lib/utils";
 
 type ChatProps = {
@@ -161,7 +157,6 @@ type ChatProps = {
 };
 
 type SubmitOptions = {
-  model?: string;
   toolMode?: ChatMode;
 };
 
@@ -200,11 +195,9 @@ const alphaChartConfig = {
 const Chat = ({ sessionId }: ChatProps) => {
   const { clearWalletAuth, getWalletAuth, isConnected, isSigning, openWalletModal } =
     useWalletSession();
-  const { chatModels, error: modelsError } = useRouterModels();
   const transport = useMemo(() => createLangclawChatTransport(), []);
   const [session, setSession] = useState<ChatSession | null>(null);
   const [input, setInput] = useState("");
-  const [selectedModel, setSelectedModel] = useState(DEFAULT_CHAT_MODEL_ID);
   const [toolMode, setToolMode] = useState<ChatMode>("chat");
   const [loading, setLoading] = useState(Boolean(sessionId));
   const [error, setError] = useState("");
@@ -221,20 +214,6 @@ const Chat = ({ sessionId }: ChatProps) => {
   useEffect(() => {
     sessionRef.current = session;
   }, [session]);
-
-  useEffect(() => {
-    if (!chatModels.length) {
-      return;
-    }
-
-    if (!chatModels.some((model) => model.id === selectedModel)) {
-      const timeoutId = window.setTimeout(() => {
-        setSelectedModel(chatModels[0].id);
-      }, 0);
-
-      return () => window.clearTimeout(timeoutId);
-    }
-  }, [chatModels, selectedModel]);
 
   const persistSession = useCallback(
     async (nextSession: ChatSession) => {
@@ -313,10 +292,6 @@ const Chat = ({ sessionId }: ChatProps) => {
     [input, storedMessages],
   );
   const maxContextTokens = BACKEND_CONTEXT_WINDOW;
-  const selectedChatModel = useMemo(
-    () => chatModels.find((model) => model.id === selectedModel),
-    [chatModels, selectedModel],
-  );
 
   const submitMessage = useCallback(
     async (text: string, options: SubmitOptions = {}) => {
@@ -336,7 +311,6 @@ const Chat = ({ sessionId }: ChatProps) => {
       }
 
       const selectedToolMode = options.toolMode ?? toolMode;
-      const modelForRequest = options.model ?? selectedModel;
       const baseSession =
         sessionRef.current ??
         createChatSession(content, sessionId ?? undefined);
@@ -354,7 +328,7 @@ const Chat = ({ sessionId }: ChatProps) => {
           { text: content },
           {
             body: {
-              model: modelForRequest,
+              model: resolveChatModel(),
               researchTrend: selectedToolMode === "research",
               sessionId: baseSession.id,
               toolMode: selectedToolMode,
@@ -395,7 +369,6 @@ const Chat = ({ sessionId }: ChatProps) => {
       getWalletAuth,
       isConnected,
       openWalletModal,
-      selectedModel,
       sendMessage,
       sessionId,
       status,
@@ -471,7 +444,6 @@ const Chat = ({ sessionId }: ChatProps) => {
     pendingStartedRef.current = true;
     const timeoutId = window.setTimeout(() => {
       void submitMessage(pending.text, {
-        model: pending.model,
         toolMode: pending.toolMode ?? (pending.researchTrend ? "research" : "chat"),
       });
     }, 0);
@@ -541,12 +513,14 @@ const Chat = ({ sessionId }: ChatProps) => {
         const originalMessage = uiMessagesToStoredMessages(messages).find(
           (message) => message.id === messageId,
         );
-        const retryMode = originalMessage?.mode ?? toolMode;
-        const retryModel = originalMessage?.model ?? selectedModel;
+        const retryMode =
+          originalMessage?.mode === "onchain"
+            ? "research"
+            : (originalMessage?.mode ?? toolMode);
 
         await regenerate({
           body: {
-            model: retryModel,
+            model: resolveChatModel(originalMessage?.model),
             researchTrend: retryMode === "research",
             sessionId: sessionRef.current?.id ?? sessionId,
             toolMode: retryMode,
@@ -555,34 +529,30 @@ const Chat = ({ sessionId }: ChatProps) => {
           messageId,
         });
 
-        return { retryMode, retryModel };
+        return { retryMode };
       };
 
       try {
         setError("");
         setSaveError("");
         setPendingRetryMessageId(null);
-        const { retryMode, retryModel } = await retryWithWallet();
+        const { retryMode } = await retryWithWallet();
         toast.info("Retry started", {
           description:
             retryMode === "research"
-              ? "Alpha mode"
-              : retryMode === "onchain"
-                ? "Intel mode"
-                : retryModel,
+              ? "Research mode"
+                : FIXED_CHAT_MODEL_LABEL,
         });
       } catch (err) {
         if (isWalletSignatureRequiredError(err)) {
           try {
             clearWalletAuth();
-            const { retryMode, retryModel } = await retryWithWallet(true);
+            const { retryMode } = await retryWithWallet(true);
             toast.success("Wallet signature refreshed", {
               description:
                 retryMode === "research"
-                  ? "Retrying Alpha mode."
-                  : retryMode === "onchain"
-                    ? "Retrying Intel mode."
-                    : `Retrying ${retryModel}.`,
+                  ? "Retrying Research mode."
+                    : `Retrying ${FIXED_CHAT_MODEL_LABEL}.`,
             });
             return;
           } catch (retryErr) {
@@ -607,7 +577,6 @@ const Chat = ({ sessionId }: ChatProps) => {
       openWalletModal,
       messages,
       regenerate,
-      selectedModel,
       sessionId,
       toolMode,
     ],
@@ -627,7 +596,7 @@ const Chat = ({ sessionId }: ChatProps) => {
                   <h3 className="font-medium text-sm">Start a Langclaw chat</h3>
                   <p className="text-muted-foreground text-sm">
                     {isConnected
-                      ? "Ask directly, run Alpha, or inspect Intel tools."
+                      ? "Ask directly or run Research with live on-chain enrichment."
                       : "Connect wallet from the sidebar to chat and load saved sessions."}
                   </p>
                 </div>
@@ -734,9 +703,9 @@ const Chat = ({ sessionId }: ChatProps) => {
           <ConversationScrollButton />
         </Conversation>
 
-        {(error || saveError || chatError || modelsError) && (
+        {(error || saveError || chatError) && (
           <div className="mx-auto mt-3 w-full shrink-0 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-            {error || saveError || chatError?.message || modelsError}
+            {error || saveError || chatError?.message}
           </div>
         )}
 
@@ -763,16 +732,9 @@ const Chat = ({ sessionId }: ChatProps) => {
                 variant="ghost"
               />
               <ChatModeControl onChange={setToolMode} value={toolMode} />
-              <ModelSelect
-                models={chatModels}
-                onChange={setSelectedModel}
-                value={selectedModel}
-              />
               <Context
-                maxTokens={
-                  selectedChatModel?.context_length ?? maxContextTokens
-                }
-                modelId={selectedModel}
+                maxTokens={maxContextTokens}
+                modelId={DEFAULT_CHAT_MODEL_ID}
                 usedTokens={estimatedContextTokens}
               >
                 <ContextTrigger />
@@ -863,15 +825,10 @@ function ChatModeControl({
       },
       {
         icon: SearchIcon,
-        label: "Alpha",
-        tooltip: "Mantle Alpha: evidence-backed research brief.",
+        label: "Research",
+        tooltip:
+          "Evidence-backed research that can enrich itself with on-chain checks when needed.",
         value: "research",
-      },
-      {
-        icon: ActivityIcon,
-        label: "Intel",
-        tooltip: "Mantle Intelligence: run on-chain data tools.",
-        value: "onchain",
       },
     ];
 
@@ -895,39 +852,6 @@ function ChatModeControl({
         );
       })}
     </ButtonGroup>
-  );
-}
-
-function ModelSelect({
-  models,
-  onChange,
-  value,
-}: {
-  models: RouterModel[];
-  onChange: (value: string) => void;
-  value: string;
-}) {
-  const selectedModel = models.find((model) => model.id === value);
-
-  return (
-    <Select onValueChange={onChange} value={value}>
-      <SelectTrigger
-        aria-label="Chat model"
-        className="h-8 min-w-0 flex-1 basis-40 text-xs sm:w-[min(15rem,42vw)] sm:flex-none"
-        size="sm"
-      >
-        <span className="truncate">
-          {selectedModel ? getModelLabel(selectedModel) : "GPT-5 mini"}
-        </span>
-      </SelectTrigger>
-      <SelectContent align="start" className="max-w-80">
-        {models.map((model) => (
-          <SelectItem key={model.id} value={model.id}>
-            {getModelLabel(model)}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
   );
 }
 
@@ -1049,7 +973,7 @@ function MessageDetails({
 
       {message.result && <DiscoverDetails payload={message.result} />}
 
-      {message.onChain && <OnChainDetails payload={message.onChain} />}
+      {message.onChain && !message.result && <OnChainDetails payload={message.onChain} />}
 
       {(message.error || message.directAnswer?.error) && (
         <p className="text-destructive">
@@ -1232,6 +1156,7 @@ function OnChainDetails({ payload }: { payload: OnChainToolFinalPayload }) {
               : "Add to watchlist"}
         </Button>
       </div>
+      {payload.report ? <ResearchReportPanel report={payload.report} /> : null}
       {payload.proof && <OnChainProofDetails proof={payload.proof} />}
       <OnChainAlphaVisualSummary payload={payload} />
       <div className="space-y-2">
@@ -1697,6 +1622,12 @@ function getMarketVisualBars(payload: OnChainToolFinalPayload) {
 }
 
 function getYieldVisualBars(payload: OnChainToolFinalPayload) {
+  const reportRanked = getYieldReportBars(payload.report);
+
+  if (reportRanked.bars.length) {
+    return reportRanked;
+  }
+
   const records = getRecordsForDomains(payload, ["defi_tvl", "yield_pools"]);
   const mantleRecords = records.filter(isMantleRecord);
   const scopedRecords = mantleRecords.length ? mantleRecords : records;
@@ -1736,6 +1667,49 @@ function getYieldVisualBars(payload: OnChainToolFinalPayload) {
     topLabel: ranked[0]
       ? `${ranked[0].label} ${formatCompactCurrency(ranked[0].value)}${
           typeof ranked[0].apy === "number" ? ` / ${ranked[0].apy.toFixed(2)}% APY` : ""
+        }`
+      : "",
+  };
+}
+
+function getYieldReportBars(payloadReport: OnChainToolFinalPayload["report"]) {
+  if (!payloadReport || payloadReport.kind !== "defi-yield") {
+    return {
+      bars: [] as Array<{ label: string; value: number }>,
+      topLabel: "",
+    };
+  }
+
+  const ranked = payloadReport.entities
+    .map((entity) => {
+      const metrics = readDefiRankingMetrics(entity);
+
+      return {
+        apy: metrics.bestApy,
+        coverage: metrics.coverage,
+        label: entity.label,
+        shortLabel: shortenChartLabel(entity.label),
+        score: metrics.score,
+        value: metrics.tvlUsd ?? 0,
+      };
+    })
+    .filter((item) => item.value > 0)
+    .slice(0, 5);
+
+  return {
+    bars: ranked.map((item) => ({
+      label: item.shortLabel,
+      value: item.value,
+    })),
+    topLabel: ranked[0]
+      ? `${ranked[0].label} ${formatCompactCurrency(ranked[0].value)}${
+          typeof ranked[0].score === "number"
+            ? ` / ${ranked[0].score.toFixed(1)} score`
+            : ""
+        }${ranked[0].coverage ? ` / ${ranked[0].coverage}` : ""}${
+          typeof ranked[0].apy === "number"
+            ? ` / ${ranked[0].apy.toFixed(2)}% APY`
+            : ""
         }`
       : "",
   };
@@ -2495,6 +2469,31 @@ function readNumber(value: unknown) {
   return undefined;
 }
 
+function readDefiRankingMetrics(
+  entity: ResearchReportEntity
+): DefiRankingMetrics {
+  return {
+    bestApy: readMetricNumber(entity.metrics.bestApy),
+    coverage: readCoverageMetric(entity.metrics.coverage),
+    momentumScore: readMetricNumber(entity.metrics.momentumScore),
+    poolCount: readMetricNumber(entity.metrics.poolCount),
+    score: readMetricNumber(entity.metrics.score),
+    tvlUsd: readMetricNumber(entity.metrics.tvlUsd),
+  };
+}
+
+function readMetricNumber(value: string | number | null | undefined) {
+  return readNumber(value);
+}
+
+function readCoverageMetric(
+  value: string | number | null | undefined
+): DefiRankingCoverage | null {
+  return value === "composite" || value === "tvl+apy" || value === "context-only"
+    ? value
+    : null;
+}
+
 function shortHash(value: string) {
   return value.length > 14 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value;
 }
@@ -2590,7 +2589,7 @@ function getLatestAssistantMessageId(messages: LangclawUIMessage[]) {
 }
 
 function buildReasoningText(message: StoredChatMessage) {
-  if (message.onChain) {
+  if (message.onChain && !message.result) {
     const payload = message.onChain;
     const tools = payload.tools.map(
       (tool) => `- ${tool.provider}: ${tool.title} ${tool.status}`,
@@ -2611,7 +2610,16 @@ function buildReasoningText(message: StoredChatMessage) {
       payload.finalAnswerMeta?.synthesis
         ? `Synthesis: ${payload.finalAnswerMeta.synthesis}`
         : undefined,
+      payload.signals
+        ? `Live signals: combined ${payload.signals.combined.status}, social ${payload.signals.social.status}, on-chain ${payload.signals.onchain.status}`
+        : undefined,
+      payload.signals?.combined?.summary,
       topTrend ? `Top trend: ${topTrend}` : undefined,
+      payload.onChain
+        ? `On-chain enrichment: ${payload.onChain.plan.intent} on ${payload.onChain.plan.chain}`
+        : payload.onChainSkippedReason
+          ? `On-chain enrichment: skipped. ${payload.onChainSkippedReason}`
+          : undefined,
       payload.finalConclusion.summary,
       ...payload.finalConclusion.keySignals.map(
         (signal) => `- ${signal.label}: ${signal.text}`,

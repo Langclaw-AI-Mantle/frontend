@@ -20,19 +20,11 @@ import {
   TranscriptionSegment,
 } from "@/components/ai-elements/transcription";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select";
-import {
-  ActivityIcon,
-  CpuIcon,
   MessageSquareIcon,
   SearchIcon,
 } from "lucide-react";
 import type { Experimental_TranscriptionResult } from "ai";
-import { type ComponentType, useCallback, useEffect, useState } from "react";
+import { type ComponentType, useCallback, useState } from "react";
 import { toast } from "sonner";
 import { SparklesText } from "./ui/sparkles-text";
 import { useRouter } from "next/navigation";
@@ -47,10 +39,9 @@ import {
 } from "@/lib/langclaw-api";
 import { useWalletSession } from "@/hooks/use-wallet-session";
 import {
-  DEFAULT_CHAT_MODEL_ID,
-  getModelLabel,
-  useRouterModels,
-} from "@/hooks/use-router-models";
+  FIXED_CHAT_MODEL_LABEL,
+  resolveChatModel,
+} from "@/lib/chat-model";
 
 const SUBMITTING_TIMEOUT = 200;
 const STREAMING_TIMEOUT = 2000;
@@ -132,9 +123,6 @@ const ChatInput = () => {
   const router = useRouter();
   const { clearWalletAuth, getWalletAuth, isConnected, isSigning, openWalletModal } =
     useWalletSession();
-  const { chatModels, error: modelsError, isLoading: isLoadingModels } =
-    useRouterModels();
-  const [selectedModel, setSelectedModel] = useState(DEFAULT_CHAT_MODEL_ID);
   const [toolMode, setToolMode] = useState<ChatMode>("chat");
   const [error, setError] = useState("");
   const [speechSegments, setSpeechSegments] = useState<TranscriptionSegments>(
@@ -147,20 +135,6 @@ const ChatInput = () => {
   const handleSpeechTranscript = useCallback((text: string) => {
     setSpeechSegments((segments) => appendTranscriptionSegment(segments, text));
   }, []);
-
-  useEffect(() => {
-    if (!chatModels.length) {
-      return;
-    }
-
-    if (!chatModels.some((model) => model.id === selectedModel)) {
-      const timeoutId = window.setTimeout(() => {
-        setSelectedModel(chatModels[0].id);
-      }, 0);
-
-      return () => window.clearTimeout(timeoutId);
-    }
-  }, [chatModels, selectedModel]);
 
   const handleSubmit = useCallback(
     async (message: PromptInputMessage) => {
@@ -200,7 +174,7 @@ const ChatInput = () => {
         const session = createChatSession(text);
 
         savePendingPrompt(session.id, {
-          model: selectedModel,
+          model: resolveChatModel(),
           researchTrend: toolMode === "research",
           text,
           toolMode,
@@ -218,10 +192,8 @@ const ChatInput = () => {
         toast.success("Chat session created", {
           description:
             toolMode === "research"
-              ? "Alpha mode is ready."
-              : toolMode === "onchain"
-                ? "Intel mode is ready."
-                : selectedModel,
+              ? "Research mode is ready."
+                : FIXED_CHAT_MODEL_LABEL,
         });
 
         setTimeout(() => {
@@ -271,7 +243,6 @@ const ChatInput = () => {
       isConnected,
       openWalletModal,
       router,
-      selectedModel,
       toolMode,
     ],
   );
@@ -300,11 +271,6 @@ const ChatInput = () => {
             <PromptInputTools className="flex-1 flex-wrap gap-1.5">
               <ChatInputSpeechButton onTranscript={handleSpeechTranscript} />
               <ChatModeControl onChange={setToolMode} value={toolMode} />
-              <ModelSelect
-                models={chatModels}
-                onChange={setSelectedModel}
-                value={selectedModel}
-              />
             </PromptInputTools>
             <PromptInputSubmit
               disabled={isSigning || !isConnected}
@@ -314,9 +280,9 @@ const ChatInput = () => {
         </PromptInput>
         <ChatInputSuggestions />
       </PromptInputProvider>
-      {(error || modelsError) && (
+      {error && (
         <p className="max-w-2xl text-center text-sm text-destructive">
-          {error || (isLoadingModels ? "" : modelsError)}
+          {error}
         </p>
       )}
     </div>
@@ -349,15 +315,10 @@ function ChatModeControl({
       },
       {
         icon: SearchIcon,
-        label: "Alpha",
-        tooltip: "Mantle Alpha: evidence-backed research brief.",
+        label: "Research",
+        tooltip:
+          "Evidence-backed research that can enrich itself with on-chain checks when needed.",
         value: "research",
-      },
-      {
-        icon: ActivityIcon,
-        label: "Intel",
-        tooltip: "Mantle Intelligence: run on-chain data tools.",
-        value: "onchain",
       },
     ];
 
@@ -381,40 +342,6 @@ function ChatModeControl({
         );
       })}
     </ButtonGroup>
-  );
-}
-
-function ModelSelect({
-  models,
-  onChange,
-  value,
-}: {
-  models: ReturnType<typeof useRouterModels>["chatModels"];
-  onChange: (value: string) => void;
-  value: string;
-}) {
-  const selectedModel = models.find((model) => model.id === value);
-
-  return (
-    <Select onValueChange={onChange} value={value}>
-      <SelectTrigger
-        aria-label="Chat model"
-        className="h-8 min-w-0 flex-1 basis-40 text-xs sm:w-[min(15rem,42vw)] sm:flex-none"
-        size="sm"
-      >
-        <CpuIcon className="size-4 text-muted-foreground" />
-        <span className="truncate">
-          {selectedModel ? getModelLabel(selectedModel) : "GPT-5 mini"}
-        </span>
-      </SelectTrigger>
-      <SelectContent align="start" className="max-w-80">
-        {models.map((model) => (
-          <SelectItem key={model.id} value={model.id}>
-            {getModelLabel(model)}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
   );
 }
 

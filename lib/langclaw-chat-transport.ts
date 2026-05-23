@@ -250,14 +250,14 @@ async function pipeBackendStreamToUIMessageChunks({
 
       if (chunk.type === "tool_plan") {
         const plan = readOnChainPlan(chunk.plan);
-        updateMetadata({ mode: "onchain" });
+        updateMetadata({ mode: "research" });
         appendReasoning(formatOnChainPlanReasoning(plan));
         return;
       }
 
       if (chunk.type === "tool_call") {
         const event = readOnChainToolCall(chunk.event);
-        updateMetadata({ mode: "onchain" });
+        updateMetadata({ mode: "research" });
         appendReasoning(
           `${event.provider}: running ${event.title} (${event.domain}).\n`
         );
@@ -266,7 +266,7 @@ async function pipeBackendStreamToUIMessageChunks({
 
       if (chunk.type === "tool_result") {
         const event = readOnChainToolResult(chunk.event);
-        updateMetadata({ mode: "onchain" });
+        updateMetadata({ mode: "research" });
         appendReasoning(
           `${event.provider}: ${event.title} ${event.status} - ${event.summary}\n`
         );
@@ -296,7 +296,12 @@ async function pipeBackendStreamToUIMessageChunks({
 
       if (chunk.type === "result") {
         const payload = readDiscoverPayload(chunk.payload);
-        appendReasoning("Mantle Alpha run complete. Composing final answer.\n");
+        if (payload.signals) {
+          appendReasoning(
+            `Signal status: combined ${payload.signals.combined.status}, social ${payload.signals.social.status}, on-chain ${payload.signals.onchain.status}.\n`
+          );
+        }
+        appendReasoning("Research run complete. Composing final answer.\n");
         stopReasoningHeartbeat(reasoningHeartbeat);
         closeReasoningPart();
         appendText(buildDiscoverAnswerContent(payload));
@@ -306,6 +311,7 @@ async function pipeBackendStreamToUIMessageChunks({
             payload.finalAnswerMeta?.usedModel ??
             payload.finalAnswerMeta?.model ??
             body.model,
+          onChain: payload.onChain,
           progressEvents,
           result: payload,
         });
@@ -653,10 +659,13 @@ function readChatMode(
 ): ChatMode | undefined {
   if (
     toolMode === "chat" ||
-    toolMode === "onchain" ||
     toolMode === "research"
   ) {
     return toolMode;
+  }
+
+  if (toolMode === "onchain") {
+    return "research";
   }
 
   return researchTrend === true ? "research" : undefined;
@@ -706,18 +715,8 @@ function formatInitialReasoning(toolMode: ChatMode, model?: string) {
 
   if (toolMode === "research") {
     return [
-      "Preparing Alpha workflow.",
-      "Plan: reserve the run, gather evidence, synthesize signals, then write the final brief.",
-      `Model target: ${modelLabel}.`,
-      "Waiting for backend stream events.",
-      "",
-    ].join("\n");
-  }
-
-  if (toolMode === "onchain") {
-    return [
-      "Preparing Intel tool workflow.",
-      "Plan: resolve Mantle context, choose source-backed tools, run them, then summarize the evidence.",
+      "Preparing Research workflow.",
+      "Plan: reserve the run, gather evidence, run on-chain enrichment, then write the final brief.",
       `Model target: ${modelLabel}.`,
       "Waiting for backend stream events.",
       "",
@@ -748,13 +747,13 @@ function startReasoningHeartbeat({
   return setInterval(() => {
     const now = Date.now();
 
-    if (now - getLastReasoningUpdateAt() < 1200) {
+    if (now - getLastReasoningUpdateAt() < 4500) {
       return;
     }
 
     tick += 1;
     appendReasoning(formatReasoningHeartbeat(toolMode, tick, now - startedAt));
-  }, 1500);
+  }, 6000);
 }
 
 function stopReasoningHeartbeat(
@@ -773,28 +772,18 @@ function formatReasoningHeartbeat(
   const elapsedSeconds = Math.max(1, Math.round(elapsedMs / 1000));
   const label =
     toolMode === "research"
-      ? "Alpha"
-      : toolMode === "onchain"
-        ? "Intel"
-        : "Chat";
+      ? "Research"
+      : "Chat";
   const steps =
     toolMode === "research"
       ? [
-          "waiting for the next agent progress event",
-          "keeping the evidence workflow open before final synthesis",
-          "still preparing source-backed signals",
+          "workflow still active. Waiting for the next backend event",
+          "still collecting evidence or synthesizing the brief",
         ]
-      : toolMode === "onchain"
-        ? [
-            "waiting for the next tool result",
-            "keeping the Mantle data workflow open before final synthesis",
-            "still collecting source-backed tool output",
-          ]
-        : [
-            "waiting for the next OpenAI stream chunk",
-            "keeping the answer stream open before final text is complete",
-            "still composing the response",
-          ];
+      : [
+          "stream still active. Waiting for the next backend event",
+          "still composing the response",
+        ];
   const step = steps[(tick - 1) % steps.length];
 
   return `${label} live trace (${elapsedSeconds}s): ${step}.\n`;
@@ -805,5 +794,5 @@ function formatOnChainPlanReasoning(plan: OnChainPlanSummary) {
     .map((command) => `${command.provider}:${command.commandId}`)
     .join(", ");
 
-  return `Mantle Intelligence plan: ${plan.intent} on ${plan.chain}. Tools: ${commands || "none"}.\n`;
+  return `On-chain enrichment plan: ${plan.intent} on ${plan.chain}. Tools: ${commands || "none"}.\n`;
 }

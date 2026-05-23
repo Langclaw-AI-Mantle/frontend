@@ -1,6 +1,6 @@
 "use client";
 
-import { SearchIcon, ShieldCheckIcon } from "lucide-react";
+import { ChevronDownIcon, SearchIcon, ShieldCheckIcon } from "lucide-react";
 
 import {
   Agent,
@@ -66,9 +66,19 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { buildDiscoverAnswerContent } from "@/lib/chat-utils";
 import type {
+  DefiRankingCoverage,
+  DefiRankingMetrics,
   DiscoverPayload,
+  DiscoverSignalSection,
+  ResearchReport,
+  ResearchReportEntity,
   WorkflowProgressEvent,
   ZeroGProof,
 } from "@/lib/langclaw-api";
@@ -104,13 +114,27 @@ export function LangclawResult({
 
 export function DiscoverDetails({ payload }: { payload: DiscoverPayload }) {
   const zeroG = payload.proof ?? payload.zeroG;
+  const structuredReport = payload.report ?? payload.onChain?.report;
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
-        <StatusPill label="Track" value="Mantle" />
-        <StatusPill label="Mode" value="AI Alpha" />
+        <StatusPill
+          label="Product chain"
+          value={payload.chainContext.productChain.name}
+        />
+        <StatusPill
+          label="Analysis chain"
+          value={payload.chainContext.analysisChain.name}
+        />
+        <StatusPill label="Mode" value="Research" />
         <StatusPill label="Evidence" value="Evidence-backed" />
+        {payload.chainContext.unsupportedAnalysisChain ? (
+          <StatusPill
+            label="Requested"
+            value={`${payload.chainContext.unsupportedAnalysisChain.name} unsupported`}
+          />
+        ) : null}
         {zeroG?.chain.status && (
           <StatusPill
             label="Proof"
@@ -172,13 +196,15 @@ export function DiscoverDetails({ payload }: { payload: DiscoverPayload }) {
         />
         <AgentContent>
           <AgentInstructions>
-            Synthesize Mantle alpha signals, source-backed evidence, verifier
-            notes, and decision proof state into a concise builder-ready answer.
+            Synthesize source-backed research, live on-chain enrichment,
+            verifier notes, and decision proof state into a concise user-facing answer.
           </AgentInstructions>
         </AgentContent>
       </Agent>
 
       <KeySignalCitations payload={payload} />
+
+      {payload.signals && <LiveSignalDetails payload={payload} />}
 
       {payload.sources.length > 0 && (
         <Sources className="rounded-md border bg-background/70 p-3">
@@ -194,6 +220,70 @@ export function DiscoverDetails({ payload }: { payload: DiscoverPayload }) {
             ))}
           </SourcesContent>
         </Sources>
+      )}
+
+      {structuredReport ? (
+        <Collapsible className="rounded-md border bg-background/70">
+          <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition-colors hover:bg-muted/40">
+            <div className="space-y-1">
+              <p className="font-medium text-foreground">Structured report</p>
+              <p className="text-sm text-muted-foreground">
+                {structuredReport.title}
+              </p>
+            </div>
+            <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="border-t p-3">
+            <ResearchReportPanel report={structuredReport} />
+          </CollapsibleContent>
+        </Collapsible>
+      ) : null}
+
+      {(payload.onChain || payload.onChainSkippedReason) && (
+        <Tool defaultOpen={false}>
+          <ToolHeader
+            state={payload.onChain ? "output-available" : "output-error"}
+            title="On-chain enrichment"
+            toolName="researchOnChainEnrichment"
+            type="dynamic-tool"
+          />
+          <ToolContent>
+            <div className="space-y-2 rounded-md border bg-background/70 p-3 text-sm">
+              {payload.onChain ? (
+                <>
+                  <div className="flex flex-wrap gap-2">
+                    <StatusPill
+                      label="Analysis chain"
+                      value={payload.onChain.plan.chainName}
+                    />
+                    <StatusPill
+                      label="Product chain"
+                      value={payload.onChain.plan.productChainName}
+                    />
+                    <StatusPill label="Intent" value={payload.onChain.plan.intent} />
+                    <StatusPill
+                      label="Tools"
+                      value={String(payload.onChain.tools.length)}
+                    />
+                  </div>
+                  <p>{payload.onChain.answer}</p>
+                  <div className="space-y-1">
+                    {payload.onChain.tools.slice(0, 5).map((tool) => (
+                      <p key={`${tool.commandId}-${tool.provider}`}>
+                        <span className="font-medium text-foreground">
+                          {tool.provider}
+                        </span>{" "}
+                        {tool.title}: {tool.summary}
+                      </p>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p>{payload.onChainSkippedReason}</p>
+              )}
+            </div>
+          </ToolContent>
+        </Tool>
       )}
 
       {payload.usage && <UsageReceipt usage={payload.usage} />}
@@ -263,6 +353,213 @@ export function WorkflowPlan({ events }: { events: WorkflowProgressEvent[] }) {
         </Queue>
       </PlanContent>
     </Plan>
+  );
+}
+
+function LiveSignalDetails({ payload }: { payload: DiscoverPayload }) {
+  const signals = payload.signals;
+
+  if (!signals) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border bg-background/70 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="font-medium text-foreground">Live signals</p>
+        <StatusPill label="Combined" value={signals.combined.status} />
+        <StatusPill label="Social" value={signals.social.status} />
+        <StatusPill label="On-chain" value={signals.onchain.status} />
+      </div>
+      <div className="grid gap-3 md:grid-cols-3">
+        <SignalSectionCard
+          label="Combined"
+          section={signals.combined}
+        />
+        <SignalSectionCard
+          label="Social"
+          section={signals.social}
+        />
+        <SignalSectionCard
+          label="On-chain"
+          section={signals.onchain}
+        />
+      </div>
+    </div>
+  );
+}
+
+function SignalSectionCard({
+  label,
+  section,
+}: {
+  label: string;
+  section: DiscoverSignalSection;
+}) {
+  return (
+    <div className="space-y-2 rounded-md border bg-background/80 p-3 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="font-medium text-foreground">{label}</p>
+        <StatusPill label="Status" value={section.status} />
+      </div>
+      <p>{section.summary}</p>
+      <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+        {section.providers.length > 0 ? (
+          <span>Providers: {section.providers.join(", ")}</span>
+        ) : (
+          <span>Providers: none</span>
+        )}
+        {section.sourceIds.length > 0 && (
+          <span>Sources: {section.sourceIds.length}</span>
+        )}
+        {section.toolIds.length > 0 && (
+          <span>Tools: {section.toolIds.length}</span>
+        )}
+      </div>
+      {section.caveat ? (
+        <p className="text-xs text-muted-foreground">{section.caveat}</p>
+      ) : null}
+    </div>
+  );
+}
+
+export function ResearchReportPanel({ report }: { report: ResearchReport }) {
+  return (
+    <div className="space-y-3 rounded-md border bg-background/70 p-3">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div className="space-y-1">
+          <p className="font-medium text-foreground">{report.title}</p>
+          <p className="text-sm text-muted-foreground">
+            {report.executiveSummary}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <StatusPill label="Report" value={report.kind} />
+          <StatusPill label="Confidence" value={report.confidence} />
+          <StatusPill label="Entities" value={String(report.entities.length)} />
+          <StatusPill label="Tables" value={String(report.tables.length)} />
+          <StatusPill label="As of" value={formatReportTimestamp(report.asOfUtc)} />
+        </div>
+      </div>
+
+      {report.entities.length > 0 ? (
+        <div className="grid gap-3 md:grid-cols-2">
+          {report.entities.slice(0, 6).map((entity) => {
+            const defiMetrics =
+              report.kind === "defi-yield"
+                ? readDefiRankingMetrics(entity)
+                : undefined;
+            const rankingCoverage =
+              defiMetrics?.coverage || readStringMetric(entity.metrics.coverage);
+            const metricEntries = getEntityMetricEntries(report, entity, defiMetrics);
+
+            return (
+              <div
+                className="space-y-2 rounded-md border bg-background/80 p-3 text-sm"
+                key={entity.id}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-medium text-foreground">
+                    {entity.rank}. {entity.label}
+                  </p>
+                  <StatusPill label="Severity" value={entity.severity} />
+                  {rankingCoverage ? (
+                    <StatusPill label="Ranking" value={rankingCoverage} />
+                  ) : null}
+                </div>
+                <p>{entity.summary}</p>
+                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                  {metricEntries.map(([key, value]) => (
+                    <span key={`${entity.id}-${key}`}>
+                      {key}: {formatReportValue(value)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {report.tables.map((table) => (
+        <div className="space-y-2" key={table.id}>
+          <div>
+            <p className="font-medium text-foreground">{table.title}</p>
+            {table.description ? (
+              <p className="text-sm text-muted-foreground">{table.description}</p>
+            ) : null}
+          </div>
+          <div className="overflow-x-auto rounded-md border bg-background/80">
+            <table className="min-w-full text-left text-sm">
+              <thead className="border-b bg-muted/30">
+                <tr>
+                  {table.columns.map((column) => (
+                    <th className="px-3 py-2 font-medium text-foreground" key={column}>
+                      {column}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {table.rows.map((row, rowIndex) => (
+                  <tr className="border-b last:border-b-0" key={`${table.id}-${rowIndex}`}>
+                    {table.columns.map((column) => (
+                      <td className="px-3 py-2 align-top" key={`${table.id}-${rowIndex}-${column}`}>
+                        {formatReportValue(row[column])}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
+
+      {report.sections.map((section) => (
+        <div className="space-y-2" key={section.id}>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-medium text-foreground">{section.title}</p>
+            {section.sourceIds.length > 0 ? (
+              <StatusPill label="Sources" value={String(section.sourceIds.length)} />
+            ) : null}
+            {section.toolIds.length > 0 ? (
+              <StatusPill label="Tools" value={String(section.toolIds.length)} />
+            ) : null}
+          </div>
+          <div className="rounded-md border bg-background/80 p-3">
+            <MessageResponse>{section.markdown}</MessageResponse>
+          </div>
+        </div>
+      ))}
+
+      <div className="space-y-2 rounded-md border bg-background/80 p-3">
+        <p className="font-medium text-foreground">Bottom line</p>
+        <p>{report.bottomLine}</p>
+      </div>
+
+      {report.recommendations.length > 0 ? (
+        <div className="space-y-2 rounded-md border bg-background/80 p-3">
+          <p className="font-medium text-foreground">Recommendations</p>
+          <ul className="space-y-1 text-sm">
+            {report.recommendations.map((recommendation) => (
+              <li key={recommendation}>- {recommendation}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {report.caveats.length > 0 ? (
+        <div className="space-y-2 rounded-md border bg-background/80 p-3">
+          <p className="font-medium text-foreground">Caveats</p>
+          <ul className="space-y-1 text-sm text-muted-foreground">
+            {report.caveats.map((caveat) => (
+              <li key={caveat}>- {caveat}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -562,4 +859,86 @@ function formatNeuron(value: string) {
   } catch {
     return value;
   }
+}
+
+function formatReportValue(value: string | number | null | undefined) {
+  if (value === null || value === undefined || value === "") {
+    return "Not available";
+  }
+
+  if (typeof value === "number") {
+    return Number.isInteger(value)
+      ? value.toLocaleString()
+      : value.toFixed(2).replace(/\.?0+$/, "");
+  }
+
+  return value;
+}
+
+function formatReportTimestamp(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toISOString().replace(".000Z", " UTC");
+}
+
+function readDefiRankingMetrics(
+  entity: ResearchReportEntity
+): DefiRankingMetrics {
+  return {
+    bestApy: readNumericMetric(entity.metrics.bestApy),
+    coverage: readCoverageMetric(entity.metrics.coverage),
+    momentumScore: readNumericMetric(entity.metrics.momentumScore),
+    poolCount: readNumericMetric(entity.metrics.poolCount),
+    score: readNumericMetric(entity.metrics.score),
+    tvlUsd: readNumericMetric(entity.metrics.tvlUsd),
+  };
+}
+
+function getEntityMetricEntries(
+  report: ResearchReport,
+  entity: ResearchReportEntity,
+  defiMetrics?: DefiRankingMetrics
+) {
+  if (report.kind === "defi-yield" && defiMetrics) {
+    return [
+      ["score", defiMetrics.score],
+      ["tvlUsd", defiMetrics.tvlUsd],
+      ["bestApy", defiMetrics.bestApy],
+      ["momentumScore", defiMetrics.momentumScore],
+      ["poolCount", defiMetrics.poolCount],
+    ].filter(([, value]) => value !== null && value !== undefined && value !== "");
+  }
+
+  return Object.entries(entity.metrics)
+    .filter(([, value]) => value !== null && value !== "")
+    .slice(0, 4);
+}
+
+function readNumericMetric(value: string | number | null | undefined) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
+function readCoverageMetric(
+  value: string | number | null | undefined
+): DefiRankingCoverage | null {
+  return value === "composite" || value === "tvl+apy" || value === "context-only"
+    ? value
+    : null;
+}
+
+function readStringMetric(value: string | number | null | undefined) {
+  return typeof value === "string" && value.trim() ? value : null;
 }

@@ -7,6 +7,7 @@ import type {
   StoredChatMessage,
   WorkflowProgressEvent,
 } from "@/lib/langclaw-api";
+import { FIXED_CHAT_MODEL_ID, FIXED_CHAT_MODEL_LABEL } from "@/lib/chat-model";
 import type { UIMessage } from "ai";
 
 export type LangclawMessageMetadata = {
@@ -27,15 +28,8 @@ export const CHAT_MODELS = [
   {
     chef: "OpenAI",
     chefSlug: "openai",
-    id: "gpt-5-mini",
-    name: "GPT-5 mini",
-    providers: ["openai"],
-  },
-  {
-    chef: "OpenAI",
-    chefSlug: "openai",
-    id: "gpt-5.2",
-    name: "GPT-5.2",
+    id: FIXED_CHAT_MODEL_ID,
+    name: FIXED_CHAT_MODEL_LABEL,
     providers: ["openai"],
   },
 ] as const;
@@ -199,9 +193,13 @@ export function buildDirectAnswerContent(payload: DirectChatPayload) {
 
 export function buildDiscoverAnswerContent(payload: DiscoverPayload) {
   const finalAnswer = payload.finalAnswer;
+
+  if (finalAnswer.answerMarkdown?.trim()) {
+    return normalizeMarkdownText(finalAnswer.answerMarkdown);
+  }
+
   const lines = [
-    `## ${finalAnswer.title}`,
-    "",
+    ...(finalAnswer.title ? [`## ${finalAnswer.title}`, ""] : []),
     normalizeMarkdownText(finalAnswer.answer),
     ...(finalAnswer.bullets.length
       ? [
@@ -211,14 +209,22 @@ export function buildDiscoverAnswerContent(payload: DiscoverPayload) {
           ...finalAnswer.bullets.map((bullet) => `- ${normalizeInlineText(bullet)}`),
         ]
       : []),
-    "",
-    "### Recommendation",
-    "",
-    normalizeMarkdownText(finalAnswer.recommendation),
-    "",
-    "### Caveat",
-    "",
-    normalizeMarkdownText(finalAnswer.caveat),
+    ...(finalAnswer.recommendation
+      ? [
+          "",
+          "### Recommendation",
+          "",
+          normalizeMarkdownText(finalAnswer.recommendation),
+        ]
+      : []),
+    ...(finalAnswer.caveat
+      ? [
+          "",
+          "### Caveat",
+          "",
+          normalizeMarkdownText(finalAnswer.caveat),
+        ]
+      : []),
   ];
 
   return joinMarkdownLines(lines);
@@ -226,8 +232,6 @@ export function buildDiscoverAnswerContent(payload: DiscoverPayload) {
 
 export function buildOnChainAnswerContent(payload: OnChainToolFinalPayload) {
   const lines = [
-    `## ${payload.title}`,
-    "",
     normalizeMarkdownText(payload.answer),
     ...(payload.bullets.length
       ? [
@@ -309,7 +313,9 @@ export function consumePendingPrompt(sessionId: string) {
       parsed.toolMode === "chat" ||
       parsed.toolMode === "onchain" ||
       parsed.toolMode === "research"
-        ? parsed.toolMode
+        ? parsed.toolMode === "onchain"
+          ? "research"
+          : parsed.toolMode
         : parsed.researchTrend === true
           ? "research"
           : "chat";

@@ -2,17 +2,23 @@
 
 import { useMemo } from "react";
 
+import {
+  DEFAULT_CHAT_MODEL_ID,
+  FIXED_CHAT_MODEL_LABEL,
+} from "@/lib/chat-model";
 import { type RouterModel } from "@/lib/langclaw-api";
 
-export const DEFAULT_CHAT_MODEL_ID = "gpt-5-mini";
-export const DEFAULT_AGENT_MODEL_ID = "gpt-5.2";
+export {
+  DEFAULT_AGENT_MODEL_ID,
+  DEFAULT_CHAT_MODEL_ID,
+} from "@/lib/chat-model";
 export const DEFAULT_IMAGE_MODEL_ID = "gpt-image-1";
 export const DEFAULT_AUDIO_MODEL_ID = "gpt-4o-mini-transcribe";
 
 const fallbackModels: RouterModel[] = [
   {
     id: DEFAULT_CHAT_MODEL_ID,
-    name: "GPT-5 mini",
+    name: FIXED_CHAT_MODEL_LABEL,
     type: "chatbot",
   },
   {
@@ -24,11 +30,6 @@ const fallbackModels: RouterModel[] = [
     id: DEFAULT_AUDIO_MODEL_ID,
     name: "GPT-4o mini transcribe",
     type: "audio",
-  },
-  {
-    id: DEFAULT_AGENT_MODEL_ID,
-    name: "GPT-5.2",
-    type: "chatbot",
   },
 ];
 

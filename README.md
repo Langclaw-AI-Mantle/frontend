@@ -7,7 +7,7 @@ The app gives users a Mantle-first AI Alpha & Data workspace for:
 - smart-money and holder-flow monitoring
 - liquidity anomaly analysis
 - Mantle protocol / yield momentum checks
-- Strategy Lab backtesting and paper-trading proof for Mantle pairs
+- Strategy Lab backtesting and paper-trading proof for Mantle pairs as a score booster for the core AI Alpha & Data workflow
 - source evidence inspection
 - Alpha Watchlist for Supabase-backed saved follow-up signals
 - on-chain agent decision proof display
@@ -46,6 +46,8 @@ Detect liquidity anomaly on Mantle pair 0xeAfc4D6d4c3391Cd4Fc10c85D2f5f972d58C0d
 The response should show source-backed signals, risk notes, provider evidence, and the `Agent decision proof` panel when backend proof anchoring is enabled.
 
 Click **Add to watchlist** on a Mantle Intelligence result, then open `/watchlist` to review saved alpha signals. Open `/strategy` to run the Dune-backed Mantle Liquidity Momentum Strategy, review equity curve/trades, and open a paper trade proof. Open `/proofs` to inspect the latest on-chain registry decisions and Strategy Proofs for the ERC-8004 agent.
+
+For hackathon packaging, the main product story stays `AI Alpha & Data`. Strategy Lab is shown as an additive demo module that strengthens the alpha narrative, visual evidence, and proof completeness.
 
 Mantle Intelligence requests also reserve and settle the user's internal MNT usage balance through the backend billing ledger.
 
