@@ -75,7 +75,7 @@ async function pipeBackendStreamToUIMessageChunks({
   let reasoningStarted = false;
   let reasoningText = "";
   let lastReasoningUpdateAt = 0;
-  const toolMode = body.toolMode ?? (body.researchTrend ? "research" : "chat");
+  let toolMode = body.toolMode ?? (body.researchTrend ? "research" : "chat");
   let metadata: LangclawMessageMetadata = {
     mode: toolMode,
     model: body.model,
@@ -171,6 +171,14 @@ async function pipeBackendStreamToUIMessageChunks({
 
     if (!message) {
       throw new Error("Message text is required.");
+    }
+
+    if (toolMode === "chat" && isSmartMoneyResearchPrompt(message)) {
+      toolMode = "research";
+      metadata = {
+        ...metadata,
+        mode: "research",
+      };
     }
 
     if (latestUserMessage?.parts.some((part) => part.type === "file")) {
@@ -349,6 +357,16 @@ async function pipeBackendStreamToUIMessageChunks({
     controller.enqueue({ finishReason: "error", type: "finish" });
     controller.error(error);
   }
+}
+
+function isSmartMoneyResearchPrompt(message: string) {
+  const normalized = message.trim();
+
+  return (
+    /\b(find|analy[sz]e|rank|track|detect|show|monitor|watch)\b/i.test(normalized) &&
+    /\bsmart[-\s]?money\b/i.test(normalized) &&
+    /\b(accumulat\w*|flow|wallet|whale|dex|holder|buy|sell|netflow|net\s*flow)\b/i.test(normalized)
+  );
 }
 
 function readChatRequestBody(body: object | undefined): ChatRequestBody {
