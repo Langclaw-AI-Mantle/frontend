@@ -452,12 +452,12 @@ function readLine(line: string, onChunk: (chunk: ChatStreamChunk) => void) {
 
 async function readErrorResponse(response: Response) {
   const payload = (await response.json().catch(() => null)) as
-    | { error?: string }
+    | { code?: string; error?: string }
     | null;
   const message = payload?.error || `Request failed with status ${response.status}.`;
 
   return readFriendlyError(
-    new LangclawApiError(message, response.status),
+    new LangclawApiError(message, response.status, payload?.code),
     message,
   );
 }

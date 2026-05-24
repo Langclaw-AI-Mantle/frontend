@@ -4,6 +4,8 @@ Next.js interface for **Langclaw Mantle Alpha Sentinel**.
 
 The app gives users a Mantle-first AI Alpha & Data workspace for:
 
+- wallet-backed account access with a Telegram link gate before chat or Research runs
+- Telegram popup onboarding for alpha alerts
 - smart-money and holder-flow monitoring
 - liquidity anomaly analysis
 - Mantle protocol / yield momentum checks
@@ -32,7 +34,18 @@ The frontend talks to the backend through `NEXT_PUBLIC_LANGCLAW_API_URL`. By def
 NEXT_PUBLIC_LANGCLAW_API_URL=http://localhost:3001
 ```
 
+## Connection Flow
+
+Langclaw requires two user connections before chat or Research starts:
+
+1. Connect wallet.
+2. Link Telegram.
+
+The wallet step opens the wallet modal. The Telegram step opens an in-app popup with a **Connect Telegram** button, a Telegram deep link, and a fallback command. The app polls the backend until the Telegram chat is linked.
+
 ## Demo Flow
+
+First connect a wallet. If Telegram is not linked yet, click **Connect Telegram** in the popup, open the bot, and confirm the wallet link.
 
 Use Research mode with:
 
@@ -47,6 +60,8 @@ Find smart-money accumulation on Arbitrum
 ```
 
 The response should show source-backed signals, structured report sections, evidence tables when row-level rows exist, and the `Agent decision proof` panel when backend proof anchoring is enabled.
+
+When the backend marks `alphaSignal.alertEligible=true`, the linked Telegram chat receives a concise alpha alert with signal, target, confidence, warning summary, proof decision, transaction link, action, and run ID.
 
 Click **Add to watchlist** on a Research result, then open `/watchlist` to review saved alpha signals. Open `/strategy` to run the Dune-backed Mantle Liquidity Momentum Strategy, review equity curve/trades, and open a paper trade proof. Open `/proofs` to inspect the latest on-chain registry decisions and Strategy Proofs for the ERC-8004 agent.
 
@@ -96,4 +111,10 @@ Strategy Lab journal proofs use `LangclawTradingJournal`. The page still runs ba
 ```bash
 pnpm typecheck
 pnpm build
+```
+
+For focused checks after chat or Telegram UI changes:
+
+```bash
+pnpm exec eslint components/TelegramConnectDialog.tsx components/ChatInput.tsx components/Chat.tsx lib/langclaw-api.ts lib/langclaw-chat-transport.ts
 ```

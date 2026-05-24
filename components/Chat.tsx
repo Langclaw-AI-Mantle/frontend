@@ -150,6 +150,10 @@ import {
   FIXED_CHAT_MODEL_LABEL,
   resolveChatModel,
 } from "@/lib/chat-model";
+import {
+  isTelegramLinkRequiredError,
+  useTelegramConnectGate,
+} from "@/components/TelegramConnectDialog";
 import { cn } from "@/lib/utils";
 
 type ChatProps = {
@@ -195,6 +199,11 @@ const alphaChartConfig = {
 const Chat = ({ sessionId }: ChatProps) => {
   const { clearWalletAuth, getWalletAuth, isConnected, isSigning, openWalletModal } =
     useWalletSession();
+  const {
+    dialog: telegramDialog,
+    openTelegramDialog,
+    requireTelegramLinkedWallet,
+  } = useTelegramConnectGate();
   const transport = useMemo(() => createLangclawChatTransport(), []);
   const [session, setSession] = useState<ChatSession | null>(null);
   const [input, setInput] = useState("");
@@ -244,6 +253,10 @@ const Chat = ({ sessionId }: ChatProps) => {
   } = useChat<LangclawUIMessage>({
     id: sessionId,
     onError: (err) => {
+      if (isTelegramLinkRequiredError(err)) {
+        openTelegramDialog();
+      }
+
       setError(err.message);
       toast.error(err.message);
     },
@@ -322,7 +335,9 @@ const Chat = ({ sessionId }: ChatProps) => {
       setSession(baseSession);
 
       const sendWithWallet = async (forceWalletSignature = false) => {
-        const wallet = await getWalletAuth({ force: forceWalletSignature });
+        const wallet = await requireTelegramLinkedWallet({
+          force: forceWalletSignature,
+        });
 
         await sendMessage(
           { text: content },
@@ -358,6 +373,10 @@ const Chat = ({ sessionId }: ChatProps) => {
           }
         }
 
+        if (isTelegramLinkRequiredError(err)) {
+          return;
+        }
+
         showError(
           setError,
           readFriendlyError(err, "Unable to start the chat."),
@@ -366,9 +385,9 @@ const Chat = ({ sessionId }: ChatProps) => {
     },
     [
       clearWalletAuth,
-      getWalletAuth,
       isConnected,
       openWalletModal,
+      requireTelegramLinkedWallet,
       sendMessage,
       sessionId,
       status,
@@ -509,7 +528,9 @@ const Chat = ({ sessionId }: ChatProps) => {
       }
 
       const retryWithWallet = async (forceWalletSignature = false) => {
-        const wallet = await getWalletAuth({ force: forceWalletSignature });
+        const wallet = await requireTelegramLinkedWallet({
+          force: forceWalletSignature,
+        });
         const originalMessage = uiMessagesToStoredMessages(messages).find(
           (message) => message.id === messageId,
         );
@@ -564,6 +585,10 @@ const Chat = ({ sessionId }: ChatProps) => {
           }
         }
 
+        if (isTelegramLinkRequiredError(err)) {
+          return;
+        }
+
         showError(
           setError,
           readFriendlyError(err, "Unable to retry chat."),
@@ -572,11 +597,11 @@ const Chat = ({ sessionId }: ChatProps) => {
     },
     [
       clearWalletAuth,
-      getWalletAuth,
       isConnected,
       openWalletModal,
       messages,
       regenerate,
+      requireTelegramLinkedWallet,
       sessionId,
       toolMode,
     ],
@@ -761,6 +786,7 @@ const Chat = ({ sessionId }: ChatProps) => {
           </PromptInputFooter>
         </PromptInput>
       </div>
+      {telegramDialog}
     </div>
   );
 };

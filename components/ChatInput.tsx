@@ -42,6 +42,10 @@ import {
   FIXED_CHAT_MODEL_LABEL,
   resolveChatModel,
 } from "@/lib/chat-model";
+import {
+  isTelegramLinkRequiredError,
+  useTelegramConnectGate,
+} from "@/components/TelegramConnectDialog";
 
 const SUBMITTING_TIMEOUT = 200;
 const STREAMING_TIMEOUT = 2000;
@@ -121,8 +125,10 @@ function SpeechTranscriptionPreview({
 
 const ChatInput = () => {
   const router = useRouter();
-  const { clearWalletAuth, getWalletAuth, isConnected, isSigning, openWalletModal } =
+  const { clearWalletAuth, isConnected, isSigning, openWalletModal } =
     useWalletSession();
+  const { dialog: telegramDialog, requireTelegramLinkedWallet } =
+    useTelegramConnectGate();
   const [toolMode, setToolMode] = useState<ChatMode>("chat");
   const [error, setError] = useState("");
   const [speechSegments, setSpeechSegments] = useState<TranscriptionSegments>(
@@ -170,7 +176,9 @@ const ChatInput = () => {
       setSpeechSegments([]);
 
       const startSession = async (forceWalletSignature = false) => {
-        const wallet = await getWalletAuth({ force: forceWalletSignature });
+        const wallet = await requireTelegramLinkedWallet({
+          force: forceWalletSignature,
+        });
         const session = createChatSession(text);
 
         savePendingPrompt(session.id, {
@@ -226,6 +234,11 @@ const ChatInput = () => {
           }
         }
 
+        if (isTelegramLinkRequiredError(err)) {
+          setStatus("ready");
+          return;
+        }
+
         showError(
           setError,
           readFriendlyError(err, "Unable to start the chat session."),
@@ -238,10 +251,10 @@ const ChatInput = () => {
       }
     },
     [
-      getWalletAuth,
       clearWalletAuth,
       isConnected,
       openWalletModal,
+      requireTelegramLinkedWallet,
       router,
       toolMode,
     ],
@@ -285,6 +298,7 @@ const ChatInput = () => {
           {error}
         </p>
       )}
+      {telegramDialog}
     </div>
   );
 };

@@ -1233,6 +1233,7 @@ type ApiKeysResponse =
     };
 
 type AutomationResponse<T> = T & {
+  code?: string;
   configured?: boolean;
   error?: string;
 };
@@ -1261,10 +1262,12 @@ const DEFAULT_BACKEND_URL =
 export const CHAT_SESSIONS_UPDATED_EVENT = "langclaw-chat-sessions-updated";
 
 export class LangclawApiError extends Error {
+  code?: string;
   status: number;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, code?: string) {
     super(message);
+    this.code = code;
     this.name = "LangclawApiError";
     this.status = status;
   }
@@ -2142,7 +2145,7 @@ async function readAutomationResponse<T>(response: Response) {
   const payload = await readJsonResponse<AutomationResponse<T>>(response);
 
   if (payload.error) {
-    throw new LangclawApiError(payload.error, response.status);
+    throw new LangclawApiError(payload.error, response.status, payload.code);
   }
 
   return payload as T;
@@ -2171,6 +2174,14 @@ export function readFriendlyError(error: unknown, fallback: string) {
 
   if (status === 402 || /insufficient\s+mnt\s+balance/i.test(message)) {
     return "Insufficient MNT balance. Add MNT credits before running this request.";
+  }
+
+  if (
+    error instanceof LangclawApiError &&
+    (error.code === "telegram_link_required" ||
+      (status === 403 && /telegram connection is required/i.test(message)))
+  ) {
+    return "Connect Telegram to continue.";
   }
 
   if (/wallet signature or api key is required/i.test(message)) {
