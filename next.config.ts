@@ -45,6 +45,14 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async rewrites() {
+    return [
+      {
+        destination: "http://103.127.98.103/:path*",
+        source: "/api/backend/:path*",
+      },
+    ];
+  },
   images: {
     remotePatterns: [
       {
