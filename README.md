@@ -12,13 +12,29 @@ The app gives users a Mantle-first AI Alpha & Data workspace for:
 - Surf-first Research responses with Dune and Nansen smart-money fallback
 - structured Evidence, Candidates, Limits, and Conclusion report sections
 - DEX accumulation, CEX withdrawal, and candidate wallet tables when row-level evidence exists
-- Strategy Lab backtesting and paper-trading proof for Mantle pairs as a score booster for the core AI Alpha & Data workflow
-- source evidence inspection
+- Strategy Lab backtesting and paper-trading proof for Mantle pairs
 - Alpha Watchlist for Supabase-backed saved follow-up signals
 - on-chain agent decision proof display
 - Proof Center for registry decision history
 
-## Local Setup
+## App routes
+
+| Route | Purpose |
+| --- | --- |
+| `/` | Marketing home |
+| `/chat`, `/chat/[slug]` | Chat and Research sessions |
+| `/watchlist` | Saved alpha signals |
+| `/strategy` | Strategy Lab (Dune backtest, scan, paper trade) |
+| `/proofs` | Proof Center (registry + journal) |
+| `/usage` | MNT usage ledger and deposits |
+| `/task` | Automation monitors |
+| `/key` | API Console |
+| `/memory` | Agent memory |
+| `/settings` | Account, notifications, Telegram link |
+
+Wallet connection is **Mantle mainnet only** (chain ID `5000`).
+
+## Local setup
 
 ```bash
 cp .env.example .env.local
@@ -28,26 +44,35 @@ pnpm dev
 
 Open `http://localhost:3000`.
 
-The frontend talks to the backend through `NEXT_PUBLIC_LANGCLAW_API_URL`. By default, use:
+The frontend talks to the backend through `NEXT_PUBLIC_LANGCLAW_API_URL`. By default:
 
 ```bash
 NEXT_PUBLIC_LANGCLAW_API_URL=http://localhost:3001
 ```
 
-## Connection Flow
+## Connection flow
 
 Langclaw requires two user connections before chat or Research starts:
 
-1. Connect wallet.
+1. Connect wallet on Mantle.
 2. Link Telegram.
 
-The wallet step opens the wallet modal. The Telegram step opens an in-app popup with a **Connect Telegram** button, a Telegram deep link, and a fallback command. The app polls the backend until the Telegram chat is linked.
+The wallet step opens the wallet modal. The Telegram step opens an in-app popup with **Connect Telegram**, a deep link, and a fallback command. The app polls the backend until the Telegram chat is linked.
 
-## Demo Flow
+## Chat modes
 
-First connect a wallet. If Telegram is not linked yet, click **Connect Telegram** in the popup, open the bot, and confirm the wallet link.
+| UI label | `toolMode` | Behavior |
+| --- | --- | --- |
+| **Chat** | `chat` | Direct OpenAI Responses stream |
+| **Research** | `research` | Full Langclaw workflow with on-chain enrichment and proof |
 
-Use Research mode with:
+- Legacy `toolMode: onchain` is normalized to `research` in the API client.
+- Smart-money prompts in Chat mode can be auto-upgraded to Research by the chat transport.
+- The client hard-locks the model to **GPT-5.4 nano** (`lib/chat-model.ts`). There is no user-facing model picker.
+
+## Demo flow
+
+Connect a wallet, link Telegram, then use **Research** with:
 
 ```text
 Find smart-money accumulation on Mantle
@@ -59,26 +84,25 @@ Then:
 Find smart-money accumulation on Arbitrum
 ```
 
-The response should show source-backed signals, structured report sections, evidence tables when row-level rows exist, and the `Agent decision proof` panel when backend proof anchoring is enabled.
+The response should show source-backed signals, structured report sections, evidence tables when row-level rows exist, and the **Agent decision proof** panel when backend proof anchoring is enabled.
 
-When the backend marks `alphaSignal.alertEligible=true`, the linked Telegram chat receives a concise alpha alert with signal, target, confidence, warning summary, proof decision, transaction link, action, and run ID.
+When the backend sets `alphaSignal.alertEligible=true`, the linked Telegram chat receives a concise alpha alert.
 
-Click **Add to watchlist** on a Research result, then open `/watchlist` to review saved alpha signals. Open `/strategy` to run the Dune-backed Mantle Liquidity Momentum Strategy, review equity curve/trades, and open a paper trade proof. Open `/proofs` to inspect the latest on-chain registry decisions and Strategy Proofs for the ERC-8004 agent.
+Click **Add to watchlist** on a Research result, then open `/watchlist`. Open `/strategy` for the Dune-backed Mantle Liquidity Momentum Strategy. Open `/proofs` for registry decisions and strategy proofs.
 
-For hackathon packaging, the main product story stays `AI Alpha & Data`. Strategy Lab is shown as an additive demo module that strengthens the alpha narrative, visual evidence, and proof completeness.
+For hackathon packaging, the main story is **AI Alpha & Data**. Strategy Lab is an additive module for proof completeness.
 
-Research requests also reserve and settle the user's internal MNT usage balance through the backend billing ledger.
+Research requests reserve and settle the user's internal MNT usage balance through the backend billing ledger.
 
-## Research Response Rules
+## Research response rules
 
-The frontend renders backend report objects directly when available.
+The frontend renders backend `report` objects directly when available.
 
-- `Read`, `Limits`, and `Conclusion` should render as paragraphs.
-- Evidence and candidate sections should show tables when the backend returns rows.
-- Empty provider rows should not render fake `Not available` tables.
-- Chain-level prompts keep chain scope. Mantle chain research should not be displayed as Ethereum MNT research.
-- Token activity on another chain can appear only as external low-confidence context.
-- Raw provider errors, Surf balance errors, HTTP errors, CLI flags, and internal fallback details should stay out of user-visible answer text.
+- `Read`, `Limits`, and `Conclusion` render as paragraphs.
+- Evidence and candidate sections show tables only when the backend returns rows.
+- Empty provider rows must not render fake tables.
+- Chain-level prompts keep chain scope. Mantle chain research must not display as Ethereum MNT research.
+- Raw provider errors, billing state, HTTP details, and internal fallback internals stay out of user-visible answer text.
 - The visible answer language follows the user's prompt language when the backend detects it.
 
 Useful smoke prompts:
@@ -90,21 +114,25 @@ Find smart-money accumulation on Ethereum
 Cari smart-money accumulation di Mantle
 ```
 
-## Mantle Proof
+## Mantle proof (documented deployment)
 
-Live proof registry:
+| Item | Value |
+| --- | --- |
+| `LangclawRegistry` | `0xe69755e4249c4978c39fbe847ca9674ce7af3505` |
+| `LangclawTradingJournal` | `0xe96e9b76af8c8f32bfa2235d647186826d92fb7d` |
+| ERC-8004 agent ID | `94` |
 
-```text
-0xe69755e4249c4978c39fbe847ca9674ce7af3505
+Strategy Lab journal proofs use `LangclawTradingJournal`. Backtests still run when the journal is not configured on the backend, but Proof Center shows the journal as not configured until `MANTLE_LANGCLAW_TRADING_JOURNAL_ADDRESS` and `MANTLE_TRADING_JOURNAL_ENABLED=true` are set.
+
+## Scripts
+
+```bash
+pnpm dev          # next dev
+pnpm build        # production build
+pnpm start        # next start
+pnpm typecheck    # tsc --noEmit
+pnpm lint         # eslint
 ```
-
-ERC-8004 agent ID:
-
-```text
-94
-```
-
-Strategy Lab journal proofs use `LangclawTradingJournal`. The page still runs backtests when the journal address is missing, but Proof Center will show the journal as not configured until `LANGCLAW_TRADING_JOURNAL_ADDRESS` is set on the backend.
 
 ## Verification
 
@@ -113,8 +141,14 @@ pnpm typecheck
 pnpm build
 ```
 
-For focused checks after chat or Telegram UI changes:
+Focused lint after chat or Telegram UI changes:
 
 ```bash
 pnpm exec eslint components/TelegramConnectDialog.tsx components/ChatInput.tsx components/Chat.tsx lib/langclaw-api.ts lib/langclaw-chat-transport.ts
 ```
+
+## Related docs
+
+- [Backend README](../backend/README.md)
+- [API reference](../backend/docs/API_REFERENCE.md)
+- [Root README](../README.md)
