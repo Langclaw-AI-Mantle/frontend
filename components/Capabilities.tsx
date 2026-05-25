@@ -1,103 +1,175 @@
+import Link from "next/link";
 import {
-  Blocks,
-  Bot,
-  CalendarSync,
-  FileCog,
-  MessagesSquare,
-  Rss,
+  ArrowRightIcon,
+  BarChart3Icon,
+  BellRingIcon,
+  BookOpenCheckIcon,
+  CreditCardIcon,
+  FlaskConicalIcon,
+  MessageSquareTextIcon,
+  RadarIcon,
+  ShieldCheckIcon,
 } from "lucide-react";
-import { Card, CardContent, CardHeader } from "./ui/card";
-import { PointerHighlight } from "./ui/pointer-highlight";
-import { ShineBorder } from "./ui/shine-border";
+
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "./ui/card";
+
+const capabilities = [
+  {
+    href: "/chat",
+    icon: MessageSquareTextIcon,
+    title: "Research",
+    label: "core",
+    description:
+      "Ask for smart-money flow, holder movement, liquidity anomalies, and protocol momentum with source-backed output.",
+  },
+  {
+    href: "/watchlist",
+    icon: RadarIcon,
+    title: "Alpha Watchlist",
+    label: "monitor",
+    description:
+      "Save signals for follow-up so analysts can return to candidates without re-running context from scratch.",
+  },
+  {
+    href: "/strategy",
+    icon: FlaskConicalIcon,
+    title: "Strategy Lab",
+    label: "test",
+    description:
+      "Backtest Mantle liquidity momentum with Dune-backed rows and paper-trade outcomes.",
+  },
+  {
+    href: "/proofs",
+    icon: ShieldCheckIcon,
+    title: "Proof Center",
+    label: "verify",
+    description:
+      "Inspect registry decisions and strategy proof records tied to the Langclaw agent identity.",
+  },
+  {
+    href: "/usage",
+    icon: CreditCardIcon,
+    title: "Usage Ledger",
+    label: "account",
+    description:
+      "Review internal MNT usage balance, billing reservations, and deposit verification surfaces.",
+  },
+  {
+    href: "/task",
+    icon: BellRingIcon,
+    title: "Automation Monitors",
+    label: "follow-up",
+    description:
+      "Configure monitoring tasks and alert paths for recurring research operations.",
+  },
+];
+
+const prompts = [
+  "Analyze holder flow and smart-money signals on Mantle USDT",
+  "Detect liquidity anomaly on a Mantle DEX pair",
+  "Rank Mantle protocols by TVL and yield momentum",
+];
 
 export default function Capabilities() {
   return (
-    <Card className="m-5 p-20 relative overflow-hidden">
-      <ShineBorder shineColor={["#A07CFE", "#FE8FB5", "#FFBE7B"]} />
-      <CardHeader className="space-y-3">
-        {/* <h1 className="text-3xl font-bold">
-          Six Core Capabilities to Build Your AI Agent
-        </h1> */}
-        <div className="text-3xl font-bold tracking-tight md:text-5xl">
-          Six Core Capabilities to Build Your
-          <PointerHighlight>
-            <span>AI Agent</span>
-          </PointerHighlight>
+    <section className="mx-auto flex max-w-7xl flex-col gap-12 px-4 py-16 md:px-6 md:py-20">
+      <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-end">
+        <div className="flex flex-col gap-4">
+          <h2 className="text-balance font-semibold text-3xl tracking-normal md:text-5xl">
+            Everything on the landing page maps to a real app surface.
+          </h2>
+          <p className="max-w-2xl text-muted-foreground leading-7">
+            No extra claims, no disconnected demo widgets. The UX points users
+            into the existing Langclaw routes they can actually open.
+          </p>
         </div>
-        <h2 className="text-xl">
-          Chat / Models / Multi-Agent / Channels Skills / Scheduled Tasks
-        </h2>
-      </CardHeader>
-      <CardContent className="grid gap-5">
-        <section className="grid grid-cols-3 gap-5">
-          <article className="border-r space-y-3">
-            <MessagesSquare size={40} />
-            <h3 className="text-xl font-bold text-primary">
-              Smart Interaction
-            </h3>
-            <h4 className="font-semibold">Conversational Chat Interface</h4>
-            <p>
-              Immersive chat experience with Markdown rendering, code
-              highlighting, and conversation history.
-            </p>
-          </article>
 
-          <article className="border-r space-y-3">
-            <Bot size={40} />
-            <h3 className="text-xl font-bold text-primary">Agent Management</h3>
-            <h4 className="font-semibold">Multi-Agent Smart Routing</h4>
-            <p>
-              Create and manage multiple AI assistants, each with its own
-              configuration.
-            </p>
-          </article>
+        <div className="rounded-lg border bg-background p-4">
+          <div className="mb-4 flex items-center gap-2">
+            <BookOpenCheckIcon aria-hidden="true" className="size-4 text-primary" />
+            <p className="font-medium text-sm">Demo prompts</p>
+          </div>
+          <div className="grid gap-2">
+            {prompts.map((prompt) => (
+              <Link
+                className="rounded-md border bg-muted/30 px-3 py-2 text-sm transition-colors hover:bg-muted"
+                href="/chat"
+                key={prompt}
+              >
+                {prompt}
+              </Link>
+            ))}
+          </div>
+        </div>
+      </div>
 
-          <article className="space-y-3">
-            <Rss size={40} />
-            <h3 className="text-xl font-bold text-primary">
-              Channel Management
-            </h3>
-            <h4 className="font-semibold">Multi-Platform Account Binding</h4>
-            <p>
-              Immersive chat experience with Markdown rendering, code
-              highlighting, and conversation history.
-            </p>
-          </article>
-        </section>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {capabilities.map((item) => {
+          const Icon = item.icon;
 
-        <section className="grid grid-cols-3 gap-5">
-          <article className="border-r space-y-3">
-            <CalendarSync size={40} />
-            <h3 className="text-xl font-bold text-primary">Automation</h3>
-            <h4 className="font-semibold">Scheduled Task Scheduler</h4>
-            <p>
-              Visual cron configuration for setting trigger conditions and
-              intervals. Let AI execute tasks automatically around the clock.
-            </p>
-          </article>
+          return (
+            <Card className="rounded-lg shadow-none" key={item.title} size="sm">
+              <CardHeader className="gap-3">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="flex size-10 items-center justify-center rounded-md bg-muted text-primary">
+                    <Icon aria-hidden="true" className="size-4" />
+                  </span>
+                  <Badge variant="outline">{item.label}</Badge>
+                </div>
+                <CardTitle>{item.title}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground leading-6">
+                  {item.description}
+                </p>
+              </CardContent>
+              <CardFooter>
+                <Button asChild className="w-full" variant="outline">
+                  <Link href={item.href}>
+                    Open {item.title}
+                    <ArrowRightIcon data-icon="inline-end" />
+                  </Link>
+                </Button>
+              </CardFooter>
+            </Card>
+          );
+        })}
+      </div>
 
-          <article className="border-r space-y-3">
-            <Blocks size={40} />
-            <h3 className="text-xl font-bold text-primary">Skill Extension</h3>
-            <h4 className="font-semibold">Built-in Skill Marketplace</h4>
-            <p>
-              Graphical skill panel with no package manager needed. Browse,
-              install, and manage skills with document processing and search
-              capabilities pre-installed.
-            </p>
-          </article>
-
-          <article className="space-y-3">
-            <FileCog size={40} />
-            <h3 className="text-xl font-bold text-primary">System Settings</h3>
-            <h4 className="font-semibold">One-Stop Configuration Center</h4>
-            <p>
-              Centralized management of themes, notifications, proxies, and
-              more. Adaptive light/dark themes with launch-at-login support.
-            </p>
-          </article>
-        </section>
-      </CardContent>
-    </Card>
+      <div className="grid gap-6 rounded-lg border bg-foreground p-6 text-background md:grid-cols-[1fr_auto] md:items-center md:p-8">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2 text-background/80 text-sm">
+            <BarChart3Icon aria-hidden="true" className="size-4" />
+            <span>Source-backed alpha workflow</span>
+          </div>
+          <h2 className="text-balance font-semibold text-2xl md:text-4xl">
+            Ready to turn Mantle data into proof?
+          </h2>
+          <p className="max-w-2xl text-background/70 leading-7">
+            Start with Research for evidence and source gaps, or open Strategy
+            Lab to test a paper-trade thesis.
+          </p>
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row md:justify-end">
+          <Button asChild variant="secondary">
+            <Link href="/chat">
+              Launch Research
+              <ArrowRightIcon data-icon="inline-end" />
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/strategy">Open Strategy Lab</Link>
+          </Button>
+        </div>
+      </div>
+    </section>
   );
 }

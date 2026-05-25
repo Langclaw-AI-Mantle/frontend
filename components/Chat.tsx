@@ -12,13 +12,17 @@ import {
   YAxis,
 } from "recharts";
 import {
+  BotIcon,
   BookmarkCheckIcon,
   BookmarkPlusIcon,
   CopyIcon,
   InfoIcon,
+  KeyRoundIcon,
   MessageSquareIcon,
+  RadioTowerIcon,
   RefreshCcwIcon,
   SearchIcon,
+  ShieldCheckIcon,
 } from "lucide-react";
 import {
   Fragment,
@@ -95,6 +99,7 @@ import {
 } from "@/components/LangclawResult";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   ChartContainer,
   ChartTooltip,
@@ -608,8 +613,13 @@ const Chat = ({ sessionId }: ChatProps) => {
   );
 
   return (
-    <div className="relative mx-auto flex h-[calc(100dvh-4rem)] min-h-0 w-full  flex-col overflow-hidden">
-      <div className="flex min-h-0 flex-1 flex-col">
+    <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-background">
+      <ChatWorkspaceHeader
+        isConnected={isConnected}
+        status={status}
+        toolMode={toolMode}
+      />
+      <div className="flex min-h-0 flex-1 flex-col bg-muted/20">
         <Conversation className="min-h-0">
           <ConversationContent className="pb-4">
             {loading ? (
@@ -618,10 +628,12 @@ const Chat = ({ sessionId }: ChatProps) => {
               <ConversationEmptyState>
                 <SearchIcon className="size-5 text-muted-foreground" />
                 <div className="space-y-1">
-                  <h3 className="font-medium text-sm">Start a Langclaw chat</h3>
+                  <h3 className="font-medium text-sm">
+                    Ask Langclaw for Mantle intelligence
+                  </h3>
                   <p className="text-muted-foreground text-sm">
                     {isConnected
-                      ? "Ask directly or run Research with live on-chain enrichment."
+                      ? "Ask directly or run Research for source-backed evidence and on-chain checks."
                       : "Connect wallet from the sidebar to chat and load saved sessions."}
                   </p>
                 </div>
@@ -729,21 +741,21 @@ const Chat = ({ sessionId }: ChatProps) => {
         </Conversation>
 
         {(error || saveError || chatError) && (
-          <div className="mx-auto mt-3 w-full shrink-0 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          <div className="mx-3 mt-3 shrink-0 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
             {error || saveError || chatError?.message}
           </div>
         )}
 
         <PromptInput
-          className="sticky bottom-0 z-20 mx-auto mt-3 w-full shrink-0 bg-background pb-1 pt-2"
+          className="sticky bottom-0 z-20 mx-auto mt-3 w-full shrink-0 rounded-none border-x-0 border-b-0 bg-background p-3"
           onSubmit={handleSubmit}
         >
           <SpeechTranscriptionPreview segments={speechSegments} />
           <PromptInputBody>
             <PromptInputTextarea
-              className="pr-12"
+              className="min-h-20 pr-12"
               onChange={(event) => setInput(event.currentTarget.value)}
-              placeholder="Ask Langclaw..."
+              placeholder="Ask about smart-money flow, liquidity anomalies, or protocol momentum..."
               value={input}
             />
           </PromptInputBody>
@@ -790,6 +802,72 @@ const Chat = ({ sessionId }: ChatProps) => {
     </div>
   );
 };
+
+function ChatWorkspaceHeader({
+  isConnected,
+  status,
+  toolMode,
+}: {
+  isConnected: boolean;
+  status: string;
+  toolMode: ChatMode;
+}) {
+  const isWorking = status === "submitted" || status === "streaming";
+  const items = [
+    {
+      icon: RadioTowerIcon,
+      label: "Mantle mainnet",
+    },
+    {
+      icon: BotIcon,
+      label: FIXED_CHAT_MODEL_LABEL,
+    },
+    {
+      icon: KeyRoundIcon,
+      label: isConnected ? "Wallet connected" : "Wallet required",
+    },
+    {
+      icon: ShieldCheckIcon,
+      label: toolMode === "research" ? "Research mode" : "Chat mode",
+    },
+  ];
+
+  return (
+    <header className="shrink-0 border-b bg-background py-3 pr-4 pl-14 md:px-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="font-semibold text-base tracking-normal">
+              Langclaw workspace
+            </h2>
+            <Badge variant={isWorking ? "default" : "outline"}>
+              {isWorking ? "Working" : "Ready"}
+            </Badge>
+          </div>
+          <p className="mt-1 text-muted-foreground text-sm">
+            Direct chat and evidence-backed research for Mantle decisions.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {items.map((item) => {
+            const Icon = item.icon;
+
+            return (
+              <span
+                className="inline-flex items-center gap-2 rounded-md border bg-muted/30 px-2.5 py-1 text-muted-foreground text-xs"
+                key={item.label}
+              >
+                <Icon aria-hidden="true" className="size-3.5 text-primary" />
+                {item.label}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+    </header>
+  );
+}
 
 function showError(setError: (message: string) => void, message: string) {
   setError(message);

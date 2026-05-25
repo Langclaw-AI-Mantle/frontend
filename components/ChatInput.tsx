@@ -13,20 +13,26 @@ import {
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
 import { ButtonGroup } from "@/components/ui/button-group";
-import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
+import { Suggestion } from "@/components/ai-elements/suggestion";
 import { SpeechInput } from "@/components/ai-elements/speech-input";
 import {
   Transcription,
   TranscriptionSegment,
 } from "@/components/ai-elements/transcription";
 import {
+  BadgeCheckIcon,
+  BotIcon,
+  DatabaseIcon,
+  KeyRoundIcon,
   MessageSquareIcon,
+  RadioTowerIcon,
   SearchIcon,
+  ShieldCheckIcon,
+  TriangleAlertIcon,
 } from "lucide-react";
 import type { Experimental_TranscriptionResult } from "ai";
 import { type ComponentType, useCallback, useState } from "react";
 import { toast } from "sonner";
-import { SparklesText } from "./ui/sparkles-text";
 import { useRouter } from "next/navigation";
 
 import { createChatSession, savePendingPrompt } from "@/lib/chat-utils";
@@ -46,13 +52,55 @@ import {
   isTelegramLinkRequiredError,
   useTelegramConnectGate,
 } from "@/components/TelegramConnectDialog";
+import { Badge } from "@/components/ui/badge";
 
 const SUBMITTING_TIMEOUT = 200;
 const STREAMING_TIMEOUT = 2000;
 const CHAT_INPUT_SUGGESTIONS = [
-  "Find smart-money accumulation on Mantle",
-  "Detect liquidity anomalies on Mantle DEX pairs",
-  "Rank Mantle protocols by TVL and yield momentum",
+  {
+    description: "Holder flow, accumulation, and source-backed confidence.",
+    label: "Smart-money flow",
+    prompt: "Find smart-money accumulation on Mantle",
+  },
+  {
+    description: "Pair-level liquidity movement and source gaps.",
+    label: "Liquidity anomaly",
+    prompt: "Detect liquidity anomalies on Mantle DEX pairs",
+  },
+  {
+    description: "TVL, yield, and protocol momentum comparison.",
+    label: "Protocol momentum",
+    prompt: "Rank Mantle protocols by TVL and yield momentum",
+  },
+];
+
+const statusItems = [
+  { icon: RadioTowerIcon, label: "Mantle mainnet" },
+  { icon: BotIcon, label: FIXED_CHAT_MODEL_LABEL },
+  { icon: KeyRoundIcon, label: "Wallet + Telegram required" },
+];
+
+const researchContext = [
+  {
+    icon: DatabaseIcon,
+    label: "Evidence",
+    text: "Usable rows, provider traces, and source-backed findings.",
+  },
+  {
+    icon: TriangleAlertIcon,
+    label: "Source gaps",
+    text: "Missing or unavailable providers stay visible to the user.",
+  },
+  {
+    icon: BadgeCheckIcon,
+    label: "Watchlist",
+    text: "Promising alpha candidates can be saved for follow-up.",
+  },
+  {
+    icon: ShieldCheckIcon,
+    label: "Proof status",
+    text: "Decision records appear when proof anchoring is configured.",
+  },
 ];
 
 type TranscriptionSegments = Experimental_TranscriptionResult["segments"];
@@ -61,15 +109,23 @@ const ChatInputSuggestions = () => {
   const { textInput } = usePromptInputController();
 
   return (
-    <Suggestions className="justify-start sm:justify-center">
+    <div className="grid w-full gap-3 md:grid-cols-3">
       {CHAT_INPUT_SUGGESTIONS.map((suggestion) => (
         <Suggestion
-          key={suggestion}
+          className="h-full items-start justify-start rounded-lg px-4 py-3"
+          key={suggestion.label}
           onClick={textInput.setInput}
-          suggestion={suggestion}
-        />
+          suggestion={suggestion.prompt}
+        >
+          <span className="flex flex-col gap-1">
+            <span className="font-medium">{suggestion.label}</span>
+            <span className="text-muted-foreground text-xs leading-5">
+              {suggestion.description}
+            </span>
+          </span>
+        </Suggestion>
       ))}
-    </Suggestions>
+    </div>
   );
 };
 
@@ -261,47 +317,128 @@ const ChatInput = () => {
   );
 
   return (
-    <div className="mx-auto flex size-full h-full min-w-0 flex-col items-center justify-center gap-8 overflow-hidden px-4">
-      <div className="flex w-full max-w-2xl flex-col items-center justify-center gap-1 text-center font-medium text-2xl leading-tight sm:flex-row sm:flex-wrap sm:items-end sm:gap-2 sm:text-3xl md:text-4xl">
-        <span className="min-w-0 max-w-full">Welcome to</span>
-        <SparklesText className="max-w-full text-4xl md:text-5xl">
-          Langclaw,
-        </SparklesText>
-        <span className="min-w-0 max-w-[18rem] break-words sm:max-w-full">
-          how can I help?
-        </span>
+    <div className="mx-auto flex min-h-[calc(100dvh-8rem)] w-full max-w-6xl flex-col justify-center gap-8 px-1 py-4">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+        <section className="flex min-w-0 flex-col gap-6">
+          <StatusStrip />
+
+          <div className="flex flex-col gap-3">
+            <h1 className="max-w-3xl text-balance font-semibold text-3xl tracking-normal md:text-5xl">
+              Ask Langclaw for Mantle intelligence.
+            </h1>
+            <p className="max-w-2xl text-muted-foreground leading-7">
+              Use Chat for direct answers, or switch to Research for
+              source-backed evidence, source gaps, and on-chain checks.
+            </p>
+          </div>
+
+          <PromptInputProvider>
+            <div className="flex flex-col gap-4 rounded-lg border bg-background p-3 shadow-sm">
+              <PromptInput
+                className="w-full overflow-hidden"
+                onSubmit={handleSubmit}
+              >
+                <SpeechTranscriptionPreview segments={speechSegments} />
+                <PromptInputBody>
+                  <PromptInputTextarea
+                    className="min-h-24"
+                    placeholder="Ask about smart-money flow, liquidity anomalies, or protocol momentum..."
+                  />
+                </PromptInputBody>
+                <PromptInputFooter className="flex-wrap items-end gap-2">
+                  <PromptInputTools className="flex-1 flex-wrap gap-1.5">
+                    <ChatInputSpeechButton
+                      onTranscript={handleSpeechTranscript}
+                    />
+                    <ChatModeControl onChange={setToolMode} value={toolMode} />
+                  </PromptInputTools>
+                  <PromptInputSubmit
+                    disabled={isSigning || !isConnected}
+                    status={status}
+                  />
+                </PromptInputFooter>
+              </PromptInput>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="font-medium text-sm">Try a Mantle prompt</p>
+                <Badge variant="outline">Research-ready</Badge>
+              </div>
+              <ChatInputSuggestions />
+            </div>
+          </PromptInputProvider>
+
+          {error && (
+            <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+              {error}
+            </p>
+          )}
+        </section>
+
+        <ResearchContextPanel />
       </div>
-      <PromptInputProvider>
-        <PromptInput
-          className="w-full max-w-xs overflow-hidden sm:max-w-2xl"
-          onSubmit={handleSubmit}
-        >
-          <SpeechTranscriptionPreview segments={speechSegments} />
-          <PromptInputBody>
-            <PromptInputTextarea />
-          </PromptInputBody>
-          <PromptInputFooter className="flex-wrap items-end gap-2">
-            <PromptInputTools className="flex-1 flex-wrap gap-1.5">
-              <ChatInputSpeechButton onTranscript={handleSpeechTranscript} />
-              <ChatModeControl onChange={setToolMode} value={toolMode} />
-            </PromptInputTools>
-            <PromptInputSubmit
-              disabled={isSigning || !isConnected}
-              status={status}
-            />
-          </PromptInputFooter>
-        </PromptInput>
-        <ChatInputSuggestions />
-      </PromptInputProvider>
-      {error && (
-        <p className="max-w-2xl text-center text-sm text-destructive">
-          {error}
-        </p>
-      )}
       {telegramDialog}
     </div>
   );
 };
+
+function StatusStrip() {
+  return (
+    <div className="flex flex-wrap gap-2 rounded-lg border bg-muted/30 p-2">
+      {statusItems.map((item) => {
+        const Icon = item.icon;
+
+        return (
+          <span
+            className="inline-flex items-center gap-2 rounded-md bg-background px-3 py-1.5 text-muted-foreground text-xs"
+            key={item.label}
+          >
+            <Icon aria-hidden="true" className="size-3.5 text-primary" />
+            {item.label}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function ResearchContextPanel() {
+  return (
+    <aside className="rounded-lg border bg-background p-4 shadow-sm">
+      <div className="flex flex-col gap-2">
+        <p className="font-semibold">Research returns more than a reply.</p>
+        <p className="text-muted-foreground text-sm leading-6">
+          Switch to Research when the question needs evidence, source quality,
+          and a follow-up path.
+        </p>
+      </div>
+
+      <div className="mt-5 grid gap-3">
+        {researchContext.map((item) => {
+          const Icon = item.icon;
+
+          return (
+            <div
+              className="flex gap-3 rounded-lg border bg-muted/20 p-3"
+              key={item.label}
+            >
+              <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-primary">
+                <Icon aria-hidden="true" className="size-4" />
+              </span>
+              <div className="min-w-0">
+                <p className="font-medium text-sm">{item.label}</p>
+                <p className="mt-1 text-muted-foreground text-xs leading-5">
+                  {item.text}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </aside>
+  );
+}
 
 function showError(setError: (message: string) => void, message: string) {
   setError(message);

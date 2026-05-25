@@ -45,6 +45,15 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  images: {
+    remotePatterns: [
+      {
+        hostname: "zwagiicvlhayuknccnhc.supabase.co",
+        pathname: "/storage/v1/object/public/image/**",
+        protocol: "https",
+      },
+    ],
+  },
   poweredByHeader: false,
   turbopack: {
     root: __dirname,

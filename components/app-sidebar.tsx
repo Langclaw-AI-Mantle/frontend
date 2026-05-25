@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -38,6 +39,7 @@ import {
   Trash2,
   User2,
   Wallet,
+  type LucideIcon,
 } from "lucide-react";
 import {
   Collapsible,
@@ -52,7 +54,13 @@ import {
 } from "./ui/dropdown-menu";
 
 import { formatUnits } from "viem";
-import { useBalance, useChains, useConnection, useDisconnect } from "wagmi";
+import {
+  useBalance,
+  useChainId,
+  useChains,
+  useConnection,
+  useDisconnect,
+} from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { Button } from "./ui/button";
 import {
@@ -66,15 +74,7 @@ import {
 } from "./ui/dialog";
 import { Input } from "./ui/input";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "./ui/card";
-import {
   CHAT_SESSIONS_UPDATED_EVENT,
-  checkBackendHealth,
   deleteChatSession,
   dispatchChatSessionsUpdated,
   listChatSessions,
@@ -86,9 +86,68 @@ import {
   WALLET_AUTH_UPDATED_EVENT,
 } from "@/hooks/use-wallet-session";
 import { Badge } from "./ui/badge";
+import { LangclawLogo } from "./LangclawLogo";
+
+type SidebarNavItem = {
+  href: string;
+  icon: LucideIcon;
+  label: string;
+};
+
+const workspaceNavItems: SidebarNavItem[] = [
+  {
+    href: "/chat",
+    icon: CircleFadingPlus,
+    label: "New Chat",
+  },
+  {
+    href: "/task",
+    icon: CalendarSync,
+    label: "Automation Task",
+  },
+  {
+    href: "/usage",
+    icon: Database,
+    label: "Usage",
+  },
+  {
+    href: "/watchlist",
+    icon: Bookmark,
+    label: "Alpha Watchlist",
+  },
+  {
+    href: "/strategy",
+    icon: FlaskConical,
+    label: "Strategy Lab",
+  },
+  {
+    href: "/proofs",
+    icon: ShieldCheck,
+    label: "Proof Center",
+  },
+];
+
+const systemNavItems: SidebarNavItem[] = [
+  {
+    href: "/key",
+    icon: Cable,
+    label: "API Console",
+  },
+  {
+    href: "/memory",
+    icon: Cpu,
+    label: "Memory",
+  },
+  {
+    href: "/settings",
+    icon: Settings,
+    label: "Settings",
+  },
+];
 
 export function AppSidebar() {
   const { isConnected, address } = useConnection();
+  const pathname = usePathname();
   const { getWalletAuth } = useWalletSession();
   // const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -97,14 +156,30 @@ export function AppSidebar() {
   const [deleteTarget, setDeleteTarget] = useState<ChatSession | null>(null);
   const [renameTarget, setRenameTarget] = useState<ChatSession | null>(null);
   const [renameTitle, setRenameTitle] = useState("");
+  const activeChainId = useChainId();
+  const chains = useChains();
+  const activeChain = useMemo(
+    () => chains.find((chain) => chain.id === activeChainId) ?? chains[0],
+    [activeChainId, chains],
+  );
   const { data: balanceUser } = useBalance({
-    address: address,
+    address,
+    chainId: activeChainId,
   });
   const balanceLabel = useMemo(() => {
     if (!balanceUser) return null;
-    return `${formatUnits(balanceUser.value, balanceUser.decimals).slice(0, 5)} ${balanceUser.symbol}`;
+
+    const formatted = formatUnits(balanceUser.value, balanceUser.decimals);
+    const numericBalance = Number(formatted);
+    const compactBalance = Number.isFinite(numericBalance)
+      ? numericBalance.toLocaleString(undefined, {
+          maximumFractionDigits: 4,
+        })
+      : formatted.slice(0, 8);
+
+    return `${compactBalance} ${balanceUser.symbol}`;
   }, [balanceUser]);
-  const chains = useChains();
+  const activeChainLabel = activeChain?.name ?? "Mantle";
   const disconnect = useDisconnect();
   const pinnedSessions = useMemo(
     () => sessions.filter((session) => session.pinned),
@@ -276,91 +351,61 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader className="border-b">
-        <Link href={"/"}>
-          <span className="text-lg font-bold mb-5">Langclaw</span>
+      <SidebarHeader className="border-b p-3">
+        <Link
+          aria-label="Langclaw home"
+          className="flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-sidebar-accent"
+          href="/"
+        >
+          <LangclawLogo
+            className="size-9 shrink-0 rounded-md ring-1 ring-sidebar-border"
+            imageClassName="left-[165%] h-[172px] w-[172px]"
+          />
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-semibold leading-5">
+              Langclaw
+            </span>
+            <span className="block truncate text-xs text-muted-foreground">
+              Mantle Alpha Sentinel
+            </span>
+          </span>
         </Link>
-        <SidebarMenuItem>
-          <SidebarMenuButton asChild>
-            <Link href="/chat">
-              <CircleFadingPlus />
-              <span>New Chat</span>
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton asChild>
-            <Link href="/task">
-              <CalendarSync />
-              <span>Automation Task</span>
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton asChild>
-            <Link href="/usage">
-              <Database />
-              <span>Usage</span>
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton asChild>
-            <Link href="/watchlist">
-              <Bookmark />
-              <span>Alpha Watchlist</span>
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton asChild>
-            <Link href="/strategy">
-              <FlaskConical />
-              <span>Strategy Lab</span>
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton asChild>
-            <Link href="/proofs">
-              <ShieldCheck />
-              <span>Proof Center</span>
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton asChild>
-            <Link href="/key">
-              <Cable />
-              <span>API Console</span>
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton asChild>
-            <Link href="/memory">
-              <Cpu />
-              <span>Memory</span>
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton asChild>
-            <Link href="/settings">
-              <Settings />
-              <span>Settings</span>
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
+        <div className="rounded-lg border border-sidebar-border bg-sidebar-accent/35 px-3 py-2.5 group-data-[collapsible=icon]:hidden">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-medium text-sidebar-foreground">
+              Workspace
+            </span>
+            <Badge className="px-1.5 py-0 text-[10px]" variant="secondary">
+              Research + Proof
+            </Badge>
+          </div>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            Mantle research workspace
+          </p>
+        </div>
+        <SidebarMenu className="mt-1">
+          <SidebarNavItems items={workspaceNavItems} pathname={pathname} />
+        </SidebarMenu>
       </SidebarHeader>
-      <SidebarContent>
-        {/* PINNED CHAT  */}
+      <SidebarContent className="px-1 py-2">
+        <SidebarGroup className="py-1">
+          <SidebarGroupLabel>System</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarNavItems items={systemNavItems} pathname={pathname} />
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
         <Collapsible defaultOpen className="group/collapsible">
-          <SidebarGroup>
+          <SidebarGroup className="py-1">
             <SidebarGroupLabel asChild>
-              <CollapsibleTrigger>
-                Pinned
-                <ChevronDown className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-180" />
+              <CollapsibleTrigger className="flex w-full items-center gap-2">
+                <span>Pinned</span>
+                <span className="ml-auto rounded bg-sidebar-accent px-1.5 text-[10px] font-medium text-muted-foreground">
+                  {pinnedSessions.length}
+                </span>
+                <ChevronDown className="size-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />
               </CollapsibleTrigger>
             </SidebarGroupLabel>
             <CollapsibleContent>
@@ -374,6 +419,7 @@ export function AppSidebar() {
                     onDeleteRequest={setDeleteTarget}
                     onRenameRequest={openRenameDialog}
                     onTogglePinned={handleTogglePinned}
+                    pathname={pathname}
                     sessions={pinnedSessions}
                   />
                 </SidebarMenu>
@@ -382,13 +428,15 @@ export function AppSidebar() {
           </SidebarGroup>
         </Collapsible>
 
-        {/* RECENTS CHAT  */}
         <Collapsible defaultOpen className="group/collapsible">
-          <SidebarGroup>
+          <SidebarGroup className="py-1">
             <SidebarGroupLabel asChild>
-              <CollapsibleTrigger>
-                Recents
-                <ChevronDown className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-180" />
+              <CollapsibleTrigger className="flex w-full items-center gap-2">
+                <span>Recents</span>
+                <span className="ml-auto rounded bg-sidebar-accent px-1.5 text-[10px] font-medium text-muted-foreground">
+                  {recentSessions.length}
+                </span>
+                <ChevronDown className="size-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />
               </CollapsibleTrigger>
             </SidebarGroupLabel>
             <CollapsibleContent>
@@ -402,6 +450,7 @@ export function AppSidebar() {
                     onDeleteRequest={setDeleteTarget}
                     onRenameRequest={openRenameDialog}
                     onTogglePinned={handleTogglePinned}
+                    pathname={pathname}
                     sessions={recentSessions}
                   />
                 </SidebarMenu>
@@ -415,23 +464,40 @@ export function AppSidebar() {
           </SidebarGroup>
         </Collapsible>
       </SidebarContent>
-      <SidebarFooter>
+      <SidebarFooter className="border-t p-3">
         {isConnected ? (
           <SidebarMenu>
             <SidebarMenuItem>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <SidebarMenuButton className="bg-primary text-primary-foreground">
-                    <User2 />
-                    <p>
-                      {address
-                        ? `${address.slice(0, 4)}...${address.slice(-4)}`
-                        : "Wallet"}
-                    </p>
-                    <Badge variant={"secondary"}>{chains[0].name}</Badge>
+                  <SidebarMenuButton
+                    className="h-auto gap-3 rounded-lg border border-sidebar-border bg-sidebar-accent/35 p-3 hover:bg-sidebar-accent data-[state=open]:bg-sidebar-accent"
+                    size="lg"
+                  >
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-sidebar-foreground">
+                      <User2 className="size-4" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="truncate text-sm font-medium text-sidebar-foreground">
+                          {address
+                            ? `${address.slice(0, 6)}...${address.slice(-4)}`
+                            : "Wallet"}
+                        </span>
+                        <Badge
+                          className="max-w-24 shrink-0 truncate px-1.5 py-0 text-[10px]"
+                          variant="secondary"
+                        >
+                          {activeChainLabel}
+                        </Badge>
+                      </span>
+                      <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                        {balanceLabel ?? "Balance loading"}
+                      </span>
+                    </span>
                   </SidebarMenuButton>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent>
+                <DropdownMenuContent align="end" className="w-56" side="top">
                   <DropdownMenuItem>
                     <CreditCard />
                     <span>{balanceLabel ?? "-"}</span>
@@ -445,11 +511,28 @@ export function AppSidebar() {
             </SidebarMenuItem>
           </SidebarMenu>
         ) : (
-          <SidebarMenu>
+          <SidebarMenu className="gap-2">
+            <div className="rounded-lg border border-sidebar-border bg-sidebar-accent/35 p-3 group-data-[collapsible=icon]:hidden">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Wallet className="size-4" />
+                <span>Wallet required</span>
+              </div>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                Connect to load pinned and recent chats.
+              </p>
+            </div>
             <ConnectButton.Custom>
               {({ openConnectModal }) => (
-                <Button onClick={openConnectModal} type="button">
-                  Connect Wallet
+                <Button
+                  aria-label="Connect Wallet"
+                  className="w-full justify-start gap-2 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+                  onClick={openConnectModal}
+                  type="button"
+                >
+                  <Wallet className="size-4" />
+                  <span className="group-data-[collapsible=icon]:hidden">
+                    Connect Wallet
+                  </span>
                 </Button>
               )}
             </ConnectButton.Custom>
@@ -532,12 +615,42 @@ export function AppSidebar() {
   );
 }
 
+function SidebarNavItems({
+  items,
+  pathname,
+}: {
+  items: SidebarNavItem[];
+  pathname: string;
+}) {
+  return items.map((item) => {
+    const Icon = item.icon;
+    const isActive =
+      pathname === item.href || pathname.startsWith(`${item.href}/`);
+
+    return (
+      <SidebarMenuItem key={item.href}>
+        <SidebarMenuButton
+          asChild
+          isActive={isActive}
+          tooltip={item.label}
+        >
+          <Link href={item.href}>
+            <Icon />
+            <span>{item.label}</span>
+          </Link>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    );
+  });
+}
+
 function SessionMenuItems({
   emptyLabel,
   isLoading,
   onDeleteRequest,
   onRenameRequest,
   onTogglePinned,
+  pathname,
   sessions,
 }: {
   emptyLabel: string;
@@ -545,6 +658,7 @@ function SessionMenuItems({
   onDeleteRequest: (session: ChatSession) => void;
   onRenameRequest: (session: ChatSession) => void;
   onTogglePinned: (session: ChatSession) => Promise<void>;
+  pathname: string;
   sessions: ChatSession[];
 }) {
   if (isLoading) {
@@ -560,14 +674,20 @@ function SessionMenuItems({
   if (!sessions.length) {
     return (
       <SidebarMenuItem>
-        <p className="px-2 py-1 text-xs text-muted-foreground">{emptyLabel}</p>
+        <p className="rounded-md border border-dashed border-sidebar-border bg-sidebar-accent/30 px-2.5 py-2 text-xs leading-5 text-muted-foreground group-data-[collapsible=icon]:hidden">
+          {emptyLabel}
+        </p>
       </SidebarMenuItem>
     );
   }
 
   return sessions.map((session) => (
     <SidebarMenuItem key={session.id}>
-      <SidebarMenuButton asChild tooltip={session.title}>
+      <SidebarMenuButton
+        asChild
+        isActive={pathname === `/chat/${session.id}`}
+        tooltip={session.title}
+      >
         <Link href={`/chat/${session.id}`}>
           <MessagesSquare />
           <span>{session.title}</span>
