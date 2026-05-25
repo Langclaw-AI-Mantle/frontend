@@ -13,7 +13,7 @@ const securityHeaders = [
       "font-src 'self' data:",
       "style-src 'self' 'unsafe-inline'",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-      "connect-src 'self' http://localhost:3001 https: wss:",
+      "connect-src 'self' http://localhost:3001 http://103.127.98.103 https: wss:",
       "frame-src 'self' https:",
       "worker-src 'self' blob:",
     ].join("; "),
