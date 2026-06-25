@@ -67,7 +67,9 @@ export default function WatchlistPage() {
   }, [getWalletAuth, isConnected]);
 
   useEffect(() => {
-    void refreshItems();
+    const refreshTimer = window.setTimeout(() => {
+      void refreshItems();
+    }, 0);
 
     const handleWatchlistUpdated = () => {
       void refreshItems();
@@ -79,6 +81,7 @@ export default function WatchlistPage() {
     );
 
     return () => {
+      window.clearTimeout(refreshTimer);
       window.removeEventListener(
         LANGCLAW_ALPHA_WATCHLIST_UPDATED_EVENT,
         handleWatchlistUpdated,
